@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  TrendingUp, TrendingDown, Activity, ShieldAlert, Cpu, BarChart2,
-  DollarSign, ArrowUpRight, ArrowDownRight, Layers, Sliders, RefreshCw,
-  Search, CheckCircle2, AlertTriangle, Smartphone, Monitor, ChevronRight,
-  BookOpen, Calendar, HelpCircle, User, LogOut, Send, Bot, Wallet, Lock
+  TrendingUp, Activity, ShieldAlert, BarChart2,
+  Layers, Search, CheckCircle2, AlertTriangle, Smartphone, Monitor,
+  Send, Bot, User, LogIn, FileCheck, ShieldCheck, X, Clock
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
@@ -18,22 +17,38 @@ const INITIAL_ASSETS = [
 ];
 
 export default function App() {
-  const [viewMode, setViewMode] = useState('mobile'); // 'mobile' | 'desktop'
-  const [mobileTab, setMobileTab] = useState('trade'); // 'markets' | 'trade' | 'positions' | 'ai' | 'risk'
+  const [viewMode, setViewMode] = useState('mobile');
+  const [mobileTab, setMobileTab] = useState('trade'); // 'markets' | 'trade' | 'positions' | 'ai' | 'risk' | 'kyc'
   const [assets, setAssets] = useState(INITIAL_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState(INITIAL_ASSETS[0]);
   const [activeCategory, setActiveCategory] = useState('ALL');
   const [timeframe, setTimeframe] = useState('15M');
-  const [chartType, setChartType] = useState('candles'); // 'candles' | 'line'
+  const [chartType, setChartType] = useState('candles');
+
+  // Auth & Profile state
+  const [user, setUser] = useState({
+    name: 'Trader Account',
+    email: 'trader@stratummarkets.com',
+    isLoggedIn: true,
+    kycStatus: 'pending' // 'unverified' | 'pending' | 'verified'
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [authForm, setAuthForm] = useState({ email: '', password: '', fullName: '' });
+
+  // KYC Submission Form state
+  const [kycForm, setKycForm] = useState({
+    docType: 'Passport',
+    idNumber: 'A94821039',
+    country: 'United States',
+    submitted: false
+  });
 
   // Trading state
   const [balance, setBalance] = useState(100000.00);
   const [orderSide, setOrderSide] = useState('BUY');
-  const [orderType, setOrderType] = useState('MARKET');
   const [units, setUnits] = useState(1.0);
   const [leverage, setLeverage] = useState(10);
-  const [slTrigger, setSlTrigger] = useState('');
-  const [tpTrigger, setTpTrigger] = useState('');
   const [positions, setPositions] = useState([
     {
       id: 'POS-1049',
@@ -45,8 +60,6 @@ export default function App() {
       currentPrice: 2342.80,
       margin: 467.70,
       pnl: 8.60,
-      sl: '2320.00',
-      tp: '2360.00'
     }
   ]);
 
@@ -56,11 +69,11 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([
     {
       role: 'assistant',
-      text: 'Welcome to Stratum Core AI™. How can I assist your technical breakdown, risk exposure audit, or macroeconomic catalysts today?'
+      text: 'Stratum Core AI™ initialized. "Trade Smarter. See Further." Ask any question regarding chart setups, macro catalysts, or risk controls.'
     }
   ]);
 
-  // Simulated live market price ticks
+  // Real-time market ticks
   useEffect(() => {
     const interval = setInterval(() => {
       setAssets((prev) =>
@@ -68,13 +81,11 @@ export default function App() {
           const deltaPct = (Math.random() - 0.495) * 0.0015;
           const newPrice = Math.max(0.0001, asset.price * (1 + deltaPct));
           const roundedPrice = Number(newPrice.toFixed(asset.decimals));
-          const newBid = Number((roundedPrice - asset.spread / 2).toFixed(asset.decimals));
-          const newAsk = Number((roundedPrice + asset.spread / 2).toFixed(asset.decimals));
           return {
             ...asset,
             price: roundedPrice,
-            bid: newBid,
-            ask: newAsk,
+            bid: Number((roundedPrice - asset.spread / 2).toFixed(asset.decimals)),
+            ask: Number((roundedPrice + asset.spread / 2).toFixed(asset.decimals)),
             change: Number((asset.change + deltaPct * 100).toFixed(2))
           };
         })
@@ -83,13 +94,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update selected asset live
   useEffect(() => {
     const updated = assets.find((a) => a.symbol === selectedAsset.symbol);
     if (updated) setSelectedAsset(updated);
   }, [assets, selectedAsset.symbol]);
 
-  // Dynamic P&L recalculation for open positions
+  // Dynamic P&L recalculation
   const enrichedPositions = useMemo(() => {
     return positions.map((pos) => {
       const match = assets.find((a) => a.symbol === pos.symbol) || selectedAsset;
@@ -108,7 +118,7 @@ export default function App() {
   const marginUsed = enrichedPositions.reduce((acc, p) => acc + p.margin, 0);
   const freeMargin = Math.max(0, equity - marginUsed);
 
-  // Simulated Candlestick generator for charting
+  // Candlestick generator
   const candleData = useMemo(() => {
     const data = [];
     let base = selectedAsset.price * 0.985;
@@ -121,7 +131,6 @@ export default function App() {
       data.push({ i, open, close, high, low });
       base = close;
     }
-    // Force the final candle to end near live selected price
     data[data.length - 1].close = selectedAsset.price;
     return data;
   }, [selectedAsset.symbol]);
@@ -133,7 +142,6 @@ export default function App() {
       alert('Insufficient Free Margin for this position size & leverage.');
       return;
     }
-
     const newPos = {
       id: `POS-${Math.floor(1000 + Math.random() * 9000)}`,
       symbol: selectedAsset.symbol,
@@ -143,13 +151,9 @@ export default function App() {
       entryPrice: selectedAsset.price,
       currentPrice: selectedAsset.price,
       margin: Number(reqMargin.toFixed(2)),
-      pnl: 0.00,
-      sl: slTrigger || 'None',
-      tp: tpTrigger || 'None'
+      pnl: 0.00
     };
-
     setPositions([newPos, ...positions]);
-    setBalance((prev) => prev - 1.50); // deduct execution fee
   };
 
   const closePosition = (id) => {
@@ -159,29 +163,28 @@ export default function App() {
     setPositions((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Google AI Studio (Gemini) Integration
+  // AI Prompting
   const handleSendMessage = async (textToSend) => {
     const query = textToSend || aiPrompt;
     if (!query.trim()) return;
 
-    const userMessage = { role: 'user', text: query };
-    setAiMessages((prev) => [...prev, userMessage]);
+    setAiMessages((prev) => [...prev, { role: 'user', text: query }]);
     setAiPrompt('');
     setAiLoading(true);
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey || apiKey.includes('YOUR_')) {
+      if (!apiKey) {
         setTimeout(() => {
           setAiMessages((prev) => [
             ...prev,
             {
               role: 'assistant',
-              text: `[Demo Sandbox Mode] ${selectedAsset.symbol} shows short-term consolidation. RSI(14) is at 54.2 with dynamic volume support. Value-at-Risk remains bounded. Note: Set VITE_GEMINI_API_KEY to activate live AI generation.`
+              text: `[Stratum Core AI] ${selectedAsset.symbol} shows consolidation around ${selectedAsset.price}. Immediate support lies at ${(selectedAsset.price * 0.995).toFixed(2)}. AI insights are purely educational.`
             }
           ]);
           setAiLoading(false);
-        }, 800);
+        }, 600);
         return;
       }
 
@@ -190,45 +193,57 @@ export default function App() {
         model: 'gemini-2.5-flash',
         contents: query,
         config: {
-          systemInstruction: `You are Stratum Core AI™, the institutional market intelligence copilot for Stratum Markets.
-Provide concise, analytical breakdowns of charts, risk metrics, macro events, and market drivers.
-Strict Rule: Always include a short compliance disclaimer stating insights are educational only and not financial advice.`
+          systemInstruction: 'You are Stratum Core AI™, institutional market copilot. Tagline: Trade Smarter. See Further. Provide concise analytical insights with compliance disclaimers.'
         }
       });
 
-      setAiMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: response.text }
-      ]);
+      setAiMessages((prev) => [...prev, { role: 'assistant', text: response.text }]);
     } catch (err) {
-      setAiMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: 'Stratum Core AI™ service unavailable. Please check your API key in environment variables.' }
-      ]);
+      setAiMessages((prev) => [...prev, { role: 'assistant', text: 'Stratum AI Copilot unavailable. Please verify API key.' }]);
     } finally {
       setAiLoading(false);
     }
   };
 
+  // Handle Authentication submit
+  const handleAuthSubmit = (e) => {
+    e.preventDefault();
+    setUser({
+      name: authMode === 'register' ? authForm.fullName || 'New Trader' : 'Authenticated Trader',
+      email: authForm.email,
+      isLoggedIn: true,
+      kycStatus: 'unverified'
+    });
+    setShowAuthModal(false);
+  };
+
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
-      {/* TOP VIEWPORT SWITCHER BAR */}
-      <header className="bg-[#0e131f] border-b border-slate-800 px-4 py-2 flex items-center justify-between text-xs sticky top-0 z-50">
+      {/* TOP NAVIGATION & BRANDING HEADER */}
+      <header className="bg-[#0e131f] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 font-bold tracking-wider text-slate-200 uppercase">
-            <span className="h-5 w-5 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">S</span>
-            Stratum Markets
+          <div className="flex items-center gap-2 font-bold tracking-wider text-slate-200">
+            <span className="h-6 w-6 rounded-md bg-blue-600 flex items-center justify-center text-white text-xs font-black shadow-md shadow-blue-500/30">
+              S
+            </span>
+            <div>
+              <span className="font-extrabold text-sm tracking-wide text-white block leading-tight">STRATUM MARKETS</span>
+              <span className="text-[9px] text-blue-400 tracking-wider font-semibold uppercase block">
+                Trade Smarter. See Further.
+              </span>
+            </div>
           </div>
-          <span className="hidden sm:inline-block bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] px-2 py-0.5 rounded font-mono">
+          <span className="hidden md:inline-block bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] px-2 py-0.5 rounded font-mono">
             SIMULATED PAPER TRADING
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Viewport switch and Auth Profile */}
+        <div className="flex items-center gap-2.5">
           <div className="bg-[#161c2e] p-1 rounded-lg flex items-center gap-1 border border-slate-700/60">
             <button
               onClick={() => setViewMode('mobile')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
                 viewMode === 'mobile' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -237,7 +252,7 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
             </button>
             <button
               onClick={() => setViewMode('desktop')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
                 viewMode === 'desktop' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -245,21 +260,137 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
               Desktop Pro
             </button>
           </div>
-          <div className="hidden md:flex items-center gap-2 font-mono text-slate-400 text-[11px]">
-            <span>EQ: <strong className="text-white">${equity.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
-            <span className={`px-1.5 py-0.5 rounded ${totalFloatingPnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-              {totalFloatingPnl >= 0 ? '+' : ''}${totalFloatingPnl.toFixed(2)}
-            </span>
-          </div>
+
+          {/* User Profile / KYC badge */}
+          {user.isLoggedIn ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setMobileTab('kyc');
+                  if (viewMode === 'desktop') setViewMode('mobile');
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                  user.kycStatus === 'verified'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : user.kycStatus === 'pending'
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="capitalize">KYC: {user.kycStatus}</span>
+              </button>
+              <button
+                onClick={() => setUser({ ...user, isLoggedIn: false })}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs"
+                title="Log Out"
+              >
+                <User className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition shadow"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign In / Register
+            </button>
+          )}
         </div>
       </header>
 
-      {/* RENDER VIEW: MOBILE APP OR DESKTOP PRO TERMINAL */}
+      {/* AUTHENTICATION MODAL */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f1422] border border-slate-800 rounded-2xl w-full max-w-sm p-6 relative shadow-2xl">
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-center mb-5">
+              <span className="h-8 w-8 rounded-lg bg-blue-600 text-white font-black inline-flex items-center justify-center text-sm mb-2">
+                S
+              </span>
+              <h2 className="text-base font-bold text-white">
+                {authMode === 'login' ? 'Sign In to Stratum Markets' : 'Create Live / Paper Account'}
+              </h2>
+              <p className="text-xs text-blue-400 mt-1">Trade Smarter. See Further.</p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-3">
+              {authMode === 'register' && (
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Full Legal Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={authForm.fullName}
+                    onChange={(e) => setAuthForm({ ...authForm, fullName: e.target.value })}
+                    className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="trader@stratummarkets.com"
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                  className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••••••"
+                  value={authForm.password}
+                  onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                  className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg mt-2"
+              >
+                {authMode === 'login' ? 'Access Trading Terminal' : 'Register Account'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center text-xs text-slate-400">
+              {authMode === 'login' ? (
+                <>
+                  Don't have an account?{' '}
+                  <button onClick={() => setAuthMode('register')} className="text-blue-400 font-semibold underline">
+                    Register
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already registered?{' '}
+                  <button onClick={() => setAuthMode('login')} className="text-blue-400 font-semibold underline">
+                    Sign In
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN VIEWPORT */}
       <main className="flex-1 flex justify-center items-stretch p-0 sm:p-4 md:p-6 overflow-x-hidden">
         {viewMode === 'mobile' ? (
-          // ================= MOBILE PHONE SHELL =================
+          // ================= MOBILE PHONE VIEW =================
           <div className="w-full max-w-[420px] bg-[#0a0d14] rounded-none sm:rounded-[36px] border-0 sm:border-[8px] sm:border-slate-800 shadow-2xl flex flex-col h-[100dvh] sm:h-[840px] relative overflow-hidden">
-            {/* Phone Hardware Notch / Status Header */}
+            {/* Phone Notch & 5G Status */}
             <div className="bg-[#0e1320] pt-2 px-5 pb-2 border-b border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
               <span className="font-semibold text-white">9:41</span>
               <div className="h-4 w-28 bg-black/60 rounded-full mx-auto" />
@@ -269,7 +400,7 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
               </div>
             </div>
 
-            {/* Mobile Account Summary Banner */}
+            {/* Mobile Virtual Balance Banner */}
             <div className="bg-gradient-to-r from-slate-900 to-[#101726] p-3 border-b border-slate-800/80 flex justify-between items-center text-xs">
               <div>
                 <span className="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">Virtual Equity</span>
@@ -285,9 +416,9 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
               </div>
             </div>
 
-            {/* Mobile Tab Content Container */}
+            {/* Mobile Tab Content */}
             <div className="flex-1 overflow-y-auto pb-20 p-3 space-y-3">
-              {/* TAB 1: MARKETS SCREENER */}
+              {/* TAB: MARKETS */}
               {mobileTab === 'markets' && (
                 <div className="space-y-3">
                   <div className="relative">
@@ -340,10 +471,9 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               )}
 
-              {/* TAB 2: TRADE TERMINAL */}
+              {/* TAB: TRADE */}
               {mobileTab === 'trade' && (
                 <div className="space-y-3">
-                  {/* Pair Header & Micro Info */}
                   <div className="flex items-center justify-between bg-[#0f1422] p-2.5 rounded-xl border border-slate-800/80">
                     <div>
                       <div className="flex items-center gap-1.5">
@@ -360,7 +490,7 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                     </div>
                   </div>
 
-                  {/* Chart View with Timeframe buttons */}
+                  {/* Chart Area */}
                   <div className="bg-[#0f1422] rounded-xl border border-slate-800/80 p-3 space-y-2">
                     <div className="flex justify-between items-center text-[10px]">
                       <div className="flex gap-1">
@@ -382,57 +512,35 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                       </button>
                     </div>
 
-                    {/* SVG Interactive Candlestick Chart */}
                     <div className="h-44 w-full relative pt-2">
                       <svg className="w-full h-full overflow-visible" viewBox="0 0 240 100" preserveAspectRatio="none">
-                        {/* Grid lines */}
                         <line x1="0" y1="25" x2="240" y2="25" stroke="#1e293b" strokeDasharray="3 3" />
                         <line x1="0" y1="50" x2="240" y2="50" stroke="#1e293b" strokeDasharray="3 3" />
                         <line x1="0" y1="75" x2="240" y2="75" stroke="#1e293b" strokeDasharray="3 3" />
 
-                        {chartType === 'candles' ? (
-                          candleData.map((c, idx) => {
-                            const minVal = Math.min(...candleData.map((d) => d.low));
-                            const maxVal = Math.max(...candleData.map((d) => d.high));
-                            const range = maxVal - minVal || 1;
+                        {candleData.map((c, idx) => {
+                          const minVal = Math.min(...candleData.map((d) => d.low));
+                          const maxVal = Math.max(...candleData.map((d) => d.high));
+                          const range = maxVal - minVal || 1;
+                          const getY = (val) => 95 - ((val - minVal) / range) * 85;
+                          const isGreen = c.close >= c.open;
+                          const color = isGreen ? '#10b981' : '#ef4444';
+                          const x = idx * 10 + 4;
 
-                            const getY = (val) => 95 - ((val - minVal) / range) * 85;
-                            const isGreen = c.close >= c.open;
-                            const color = isGreen ? '#10b981' : '#ef4444';
-                            const x = idx * 10 + 4;
-
-                            return (
-                              <g key={idx}>
-                                {/* Wick */}
-                                <line x1={x + 3} y1={getY(c.high)} x2={x + 3} y2={getY(c.low)} stroke={color} strokeWidth="1" />
-                                {/* Body */}
-                                <rect
-                                  x={x}
-                                  y={Math.min(getY(c.open), getY(c.close))}
-                                  width="6"
-                                  height={Math.max(2, Math.abs(getY(c.open) - getY(c.close)))}
-                                  fill={color}
-                                  rx="1"
-                                />
-                              </g>
-                            );
-                          })
-                        ) : (
-                          <polyline
-                            fill="none"
-                            stroke="#38bdf8"
-                            strokeWidth="2"
-                            points={candleData
-                              .map((c, idx) => {
-                                const minVal = Math.min(...candleData.map((d) => d.low));
-                                const maxVal = Math.max(...candleData.map((d) => d.high));
-                                const range = maxVal - minVal || 1;
-                                const y = 95 - ((c.close - minVal) / range) * 85;
-                                return `${idx * 10 + 7},${y}`;
-                              })
-                              .join(' ')}
-                          />
-                        )}
+                          return (
+                            <g key={idx}>
+                              <line x1={x + 3} y1={getY(c.high)} x2={x + 3} y2={getY(c.low)} stroke={color} strokeWidth="1" />
+                              <rect
+                                x={x}
+                                y={Math.min(getY(c.open), getY(c.close))}
+                                width="6"
+                                height={Math.max(2, Math.abs(getY(c.open) - getY(c.close)))}
+                                fill={color}
+                                rx="1"
+                              />
+                            </g>
+                          );
+                        })}
                       </svg>
                       <div className="absolute right-1 top-1 bg-blue-950/80 border border-blue-500/40 text-[9px] font-mono px-1.5 py-0.5 rounded text-blue-300">
                         Live: {selectedAsset.price}
@@ -440,9 +548,8 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                     </div>
                   </div>
 
-                  {/* Mobile Order Deck */}
+                  {/* Order Actions */}
                   <div className="bg-[#0f1422] rounded-xl border border-slate-800/80 p-3 space-y-3">
-                    {/* Buy/Sell Selector */}
                     <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-lg">
                       <button
                         onClick={() => setOrderSide('BUY')}
@@ -462,7 +569,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                       </button>
                     </div>
 
-                    {/* Size and Leverage Selector */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <label className="text-[10px] text-slate-400 block mb-1">Contract Units</label>
@@ -490,12 +596,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                       </div>
                     </div>
 
-                    {/* Order summary note */}
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800">
-                      <span>Margin Required:</span>
-                      <span className="text-white font-bold">${((selectedAsset.price * units) / leverage).toFixed(2)}</span>
-                    </div>
-
                     <button
                       onClick={handleExecuteOrder}
                       className={`w-full py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition shadow-lg ${
@@ -510,7 +610,7 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               )}
 
-              {/* TAB 3: POSITIONS & TRADES */}
+              {/* TAB: POSITIONS */}
               {mobileTab === 'positions' && (
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -556,18 +656,17 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               )}
 
-              {/* TAB 4: STRATUM CORE AI™ COPILOT */}
+              {/* TAB: STRATUM CORE AI™ */}
               {mobileTab === 'ai' && (
                 <div className="h-full flex flex-col space-y-2">
                   <div className="bg-blue-600/10 border border-blue-500/20 rounded-xl p-2.5 flex items-center gap-2">
                     <Bot className="w-5 h-5 text-blue-400 shrink-0" />
                     <div>
                       <div className="text-xs font-bold text-blue-200">Stratum Core AI™</div>
-                      <div className="text-[10px] text-slate-400">Powered by Gemini 2.5 Flash</div>
+                      <div className="text-[10px] text-slate-400">Trade Smarter. See Further.</div>
                     </div>
                   </div>
 
-                  {/* Messages container */}
                   <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[360px] max-h-[460px]">
                     {aiMessages.map((m, idx) => (
                       <div
@@ -581,15 +680,8 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                         {m.text}
                       </div>
                     ))}
-                    {aiLoading && (
-                      <div className="bg-[#121826] text-xs p-3 rounded-xl border border-slate-800 text-slate-400 flex items-center gap-2">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                        Auditing market dynamics...
-                      </div>
-                    )}
                   </div>
 
-                  {/* Quick question chips */}
                   <div className="flex gap-1.5 overflow-x-auto py-1 text-[10px] scrollbar-none">
                     <button
                       onClick={() => handleSendMessage('Why is Gold moving today?')}
@@ -603,15 +695,8 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                     >
                       Explain RSI?
                     </button>
-                    <button
-                      onClick={() => handleSendMessage('Audit my portfolio Value-at-Risk')}
-                      className="bg-[#121826] hover:bg-slate-800 border border-slate-700/80 px-2 py-1 rounded-full whitespace-nowrap text-slate-300"
-                    >
-                      Risk Audit
-                    </button>
                   </div>
 
-                  {/* AI Input Form */}
                   <div className="relative pt-1">
                     <input
                       type="text"
@@ -631,7 +716,78 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               )}
 
-              {/* TAB 5: RISK ENGINE & VAULT */}
+              {/* TAB: KYC / AML COMPLIANCE VERIFICATION */}
+              {mobileTab === 'kyc' && (
+                <div className="space-y-3">
+                  <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs font-bold text-white">Identity Verification (KYC)</span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                        user.kycStatus === 'verified'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : user.kycStatus === 'pending'
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                      }`}>
+                        {user.kycStatus}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400">
+                      Tier 1 Verification unlocks unlimited deposits, automated institutional withdrawals, and margin access.
+                    </p>
+
+                    <div className="bg-[#121826] p-3 rounded-lg border border-slate-800 space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Document Type</label>
+                        <select
+                          value={kycForm.docType}
+                          onChange={(e) => setKycForm({ ...kycForm, docType: e.target.value })}
+                          className="w-full bg-[#182032] border border-slate-700 rounded-lg p-1.5 text-xs text-white"
+                        >
+                          <option>International Passport</option>
+                          <option>National Identity Card</option>
+                          <option>Driver's License</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Document Number</label>
+                        <input
+                          type="text"
+                          value={kycForm.idNumber}
+                          onChange={(e) => setKycForm({ ...kycForm, idNumber: e.target.value })}
+                          className="w-full bg-[#182032] border border-slate-700 rounded-lg p-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          setUser({ ...user, kycStatus: 'pending' });
+                          alert('KYC Documents submitted for institutional review.');
+                        }}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-lg text-xs transition mt-1"
+                      >
+                        Submit Verification Documents
+                      </button>
+                    </div>
+
+                    {/* Simulation Admin override */}
+                    <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-[10px] text-slate-500">
+                      <span>Simulator Compliance Override:</span>
+                      <button
+                        onClick={() => setUser({ ...user, kycStatus: user.kycStatus === 'verified' ? 'pending' : 'verified' })}
+                        className="text-blue-400 font-semibold underline"
+                      >
+                        Toggle Status ({user.kycStatus === 'verified' ? 'Revoke' : 'Approve'})
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: RISK */}
               {mobileTab === 'risk' && (
                 <div className="space-y-3">
                   <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3.5 space-y-3">
@@ -654,31 +810,20 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                         <span>1-Day 95% VaR:</span>
                         <span className="text-amber-400 font-bold">$124.50</span>
                       </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Stop-Loss Coverage:</span>
-                        <span className="text-emerald-400 font-bold">100%</span>
-                      </div>
                     </div>
-                  </div>
-
-                  <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
-                    <div className="font-bold text-slate-300">Capital Safeguards</div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      All positions are monitored by the Stratum Risk Engine. Negative balance protection is enabled across all simulated instruments.
-                    </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* STICKY BOTTOM NAVIGATION BAR */}
+            {/* BOTTOM NAV BAR */}
             <nav className="absolute bottom-0 left-0 right-0 bg-[#0c101a]/95 backdrop-blur-md border-t border-slate-800/80 px-2 py-2 flex justify-around items-center z-40">
               {[
                 { id: 'markets', label: 'Markets', icon: BarChart2 },
                 { id: 'trade', label: 'Trade', icon: TrendingUp },
                 { id: 'positions', label: 'Positions', icon: Layers, badge: enrichedPositions.length },
                 { id: 'ai', label: 'Stratum AI', icon: Bot },
-                { id: 'risk', label: 'Risk Center', icon: ShieldAlert }
+                { id: 'kyc', label: 'KYC Center', icon: ShieldAlert }
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = mobileTab === item.id;
@@ -703,9 +848,8 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
             </nav>
           </div>
         ) : (
-          // ================= DESKTOP PRO TERMINAL =================
+          // ================= DESKTOP PRO WORKSTATION =================
           <div className="w-full max-w-7xl bg-[#0a0d14] rounded-2xl border border-slate-800 shadow-2xl flex flex-col overflow-hidden">
-            {/* Desktop Subheader Ticker */}
             <div className="bg-[#0d121e] border-b border-slate-800 px-4 py-2 flex items-center justify-between text-xs">
               <div className="flex items-center gap-6">
                 <span className="font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -718,14 +862,14 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                   <span>Free Margin: <strong className="text-emerald-400">${freeMargin.toFixed(2)}</strong></span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-400 font-mono">Status: Connected (NY4 Equinix)</span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-blue-400 font-medium">"Trade Smarter. See Further."</span>
+                <span className="text-[11px] text-slate-500 font-mono">NY4 Cross-Connect</span>
               </div>
             </div>
 
-            {/* 3-Column Terminal Layout */}
             <div className="flex-1 grid grid-cols-12 divide-x divide-slate-800 min-h-[580px]">
-              {/* Left Column: Watchlist (3 cols) */}
+              {/* Watchlist */}
               <div className="col-span-3 flex flex-col bg-[#0b0f19]">
                 <div className="p-3 border-b border-slate-800 flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-300 uppercase">Market Screener</span>
@@ -755,7 +899,7 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               </div>
 
-              {/* Center Column: Chart & Intelligence (6 cols) */}
+              {/* Chart & Positions */}
               <div className="col-span-6 flex flex-col bg-[#080b12]">
                 <div className="p-3 border-b border-slate-800 flex justify-between items-center">
                   <div className="flex items-center gap-3">
@@ -768,7 +912,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                   </div>
                 </div>
 
-                {/* Desktop Chart Area */}
                 <div className="flex-1 p-4 relative min-h-[300px]">
                   <svg className="w-full h-full overflow-visible" viewBox="0 0 400 160" preserveAspectRatio="none">
                     <line x1="0" y1="40" x2="400" y2="40" stroke="#1e293b" strokeDasharray="3 3" />
@@ -801,7 +944,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                   </svg>
                 </div>
 
-                {/* Bottom Drawer: Positions */}
                 <div className="h-44 border-t border-slate-800 bg-[#0a0d17] p-3 flex flex-col">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs font-bold text-slate-300 uppercase">Open Positions ({enrichedPositions.length})</span>
@@ -842,9 +984,8 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                 </div>
               </div>
 
-              {/* Right Column: Execution & AI Copilot (3 cols) */}
+              {/* Order Deck & AI */}
               <div className="col-span-3 flex flex-col bg-[#0b0f19] divide-y divide-slate-800">
-                {/* Order Execution */}
                 <div className="p-4 space-y-3">
                   <span className="text-xs font-bold text-slate-300 uppercase block">Trade Execution</span>
                   <div className="grid grid-cols-2 gap-2">
@@ -894,7 +1035,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                   </button>
                 </div>
 
-                {/* Stratum AI Copilot on Desktop */}
                 <div className="flex-1 p-3 flex flex-col overflow-hidden">
                   <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-blue-400">
                     <Bot className="w-4 h-4" />
@@ -906,20 +1046,6 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
                         {m.text}
                       </div>
                     ))}
-                    {aiLoading && <div className="text-[11px] text-slate-500">Analyzing...</div>}
-                  </div>
-                  <div className="mt-2 relative">
-                    <input
-                      type="text"
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                      placeholder="Ask market AI..."
-                      className="w-full bg-[#121826] border border-slate-800 rounded-lg pl-2 pr-8 py-1.5 text-xs text-white focus:outline-none"
-                    />
-                    <button onClick={() => handleSendMessage()} className="absolute right-2 top-2 text-blue-400">
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -928,10 +1054,13 @@ Strict Rule: Always include a short compliance disclaimer stating insights are e
         )}
       </main>
 
-      {/* FOOTER COMPLIANCE & LEGAL NOTICE */}
-      <footer className="bg-[#07090e] border-t border-slate-800/80 px-4 py-3 text-[11px] text-slate-500 text-center">
-        <p>
-          Stratum Markets is an institutional market intelligence & simulated paper-trading platform. Financial trading carries significant risk of capital loss. AI-generated insights are educational and do not constitute financial advice.
+      {/* FOOTER */}
+      <footer className="bg-[#07090e] border-t border-slate-800/80 px-4 py-3 text-[11px] text-slate-500 text-center flex flex-col sm:flex-row justify-between items-center max-w-7xl mx-auto w-full gap-2">
+        <div>
+          <strong className="text-slate-400">Stratum Markets</strong> — Trade Smarter. See Further.
+        </div>
+        <p className="text-[10px]">
+          Simulated trading platform. AI insights are educational and do not constitute financial advice.
         </p>
       </footer>
     </div>
