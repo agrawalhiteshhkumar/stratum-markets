@@ -58,7 +58,7 @@ const STRATEGY_POOLS = [
 
 export default function App() {
   const [viewMode, setViewMode] = useState('mobile');
-  const [mobileTab, setMobileTab] = useState('trade'); // 'markets' | 'trade' | 'pools' | 'affiliate' | 'banking' | 'academy' | 'ai'
+  const [mobileTab, setMobileTab] = useState('trade'); // 'trade' | 'markets' | 'pools' | 'affiliate' | 'banking' | 'academy' | 'ai' | 'kyc'
   const [assets, setAssets] = useState(INITIAL_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState(INITIAL_ASSETS[0]);
   const [activeCategory, setActiveCategory] = useState('ALL');
@@ -85,10 +85,16 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ email: '', password: '', fullName: '' });
 
-  // Banking modals
-  const [bankingAction, setBankingAction] = useState('deposit'); // 'deposit' | 'withdraw'
+  // Banking
+  const [bankingAction, setBankingAction] = useState('deposit');
   const [bankingAmount, setBankingAmount] = useState('5000');
   const [bankingNotice, setBankingNotice] = useState('');
+
+  // KYC Submission Form state
+  const [kycForm, setKycForm] = useState({
+    docType: 'International Passport',
+    idNumber: 'A94821039'
+  });
 
   // Trading state
   const [orderSide, setOrderSide] = useState('BUY');
@@ -199,14 +205,14 @@ export default function App() {
 
     if (bankingAction === 'deposit') {
       setBalance((prev) => prev + amt);
-      setBankingNotice(`Successfully credited $${amt.toLocaleString()} USD to trading wallet.`);
+      setBankingNotice(`Credited $${amt.toLocaleString()} USD to wallet.`);
     } else {
       if (amt > freeMargin) {
         setBankingNotice('Withdrawal rejected: Amount exceeds available free margin.');
         return;
       }
       setBalance((prev) => prev - amt);
-      setBankingNotice(`Withdrawal request for $${amt.toLocaleString()} processed. Estimated settlement: 4-6 hours.`);
+      setBankingNotice(`Withdrawal request for $${amt.toLocaleString()} processed. Instant payout.`);
     }
     setTimeout(() => setBankingNotice(''), 4000);
   };
@@ -225,13 +231,13 @@ export default function App() {
         poolId: pool.id,
         name: pool.name,
         amount: pool.minDeposit,
-        weeklyYield: `~$${((pool.minDeposit * 0.015)).toFixed(2)}`
+        weeklyYield: `~$${(pool.minDeposit * 0.015).toFixed(2)}`
       }
     ]);
     alert(`Successfully enrolled in ${pool.name} with $${pool.minDeposit} allocation!`);
   };
 
-  // Stratum Core AI query via Google Gen AI
+  // Stratum Core AI
   const handleSendMessage = async (textToSend) => {
     const query = textToSend || aiPrompt;
     if (!query.trim()) return;
@@ -248,7 +254,7 @@ export default function App() {
             ...prev,
             {
               role: 'assistant',
-              text: `[Stratum Core AI] ${selectedAsset.symbol} is trading at ${selectedAsset.price}. High volatility indicates momentum accumulation. Notice: Educational analysis only.`
+              text: `[Stratum Core AI] ${selectedAsset.symbol} is trading at ${selectedAsset.price}. Momentum indicators suggest accumulation at support. Note: Educational intelligence only.`
             }
           ]);
           setAiLoading(false);
@@ -271,6 +277,20 @@ export default function App() {
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleAuthSubmit = (e) => {
+    e.preventDefault();
+    setUser({
+      name: authMode === 'register' ? authForm.fullName || 'New Trader' : 'Authenticated Trader',
+      email: authForm.email,
+      isLoggedIn: true,
+      kycStatus: 'unverified',
+      referralCode: 'STRAT-9482',
+      referralEarnings: 0.00,
+      referralCount: 0
+    });
+    setShowAuthModal(false);
   };
 
   return (
@@ -323,8 +343,96 @@ export default function App() {
               {totalFloatingPnl >= 0 ? '+' : ''}${totalFloatingPnl.toFixed(2)}
             </span>
           </div>
+
+          {user.isLoggedIn ? (
+            <button
+              onClick={() => setMobileTab('kyc')}
+              className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded text-[11px] border font-medium ${
+                user.kycStatus === 'verified'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              KYC: {user.kycStatus}
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="bg-blue-600 text-white px-2.5 py-1 rounded text-[11px] font-bold"
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </header>
+
+      {/* AUTHENTICATION MODAL */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f1422] border border-slate-800 rounded-2xl w-full max-w-sm p-6 relative shadow-2xl">
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-center mb-5">
+              <span className="h-8 w-8 rounded-lg bg-blue-600 text-white font-black inline-flex items-center justify-center text-sm mb-2">
+                S
+              </span>
+              <h2 className="text-base font-bold text-white">
+                {authMode === 'login' ? 'Sign In to Stratum Markets' : 'Create Trading Account'}
+              </h2>
+              <p className="text-xs text-blue-400 mt-1">Trade Smarter. See Further.</p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-3">
+              {authMode === 'register' && (
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Trader Name"
+                    value={authForm.fullName}
+                    onChange={(e) => setAuthForm({ ...authForm, fullName: e.target.value })}
+                    className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="trader@stratummarkets.com"
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                  className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••••••"
+                  value={authForm.password}
+                  onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                  className="w-full bg-[#161c2c] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg mt-2"
+              >
+                {authMode === 'login' ? 'Access Terminal' : 'Register Account'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 flex justify-center items-stretch p-0 sm:p-4 md:p-6 overflow-x-hidden">
@@ -360,21 +468,23 @@ export default function App() {
               </div>
             </div>
 
-            {/* Sub-navigation Menu for Mobile Ecosystem */}
-            <div className="flex bg-[#0d121e] border-b border-slate-800 overflow-x-auto text-[11px] scrollbar-none px-2 py-1 gap-1">
+            {/* Sub-navigation Menu: Clean Compact Grid (Zero Scrollbars) */}
+            <div className="grid grid-cols-3 gap-1 bg-[#0d121e] border-b border-slate-800 p-1.5 text-[10px]">
               {[
-                { id: 'trade', label: 'Trade Terminal' },
+                { id: 'trade', label: 'Trade' },
                 { id: 'markets', label: 'Markets' },
-                { id: 'pools', label: 'Smart Packages' },
+                { id: 'pools', label: 'Packages' },
                 { id: 'affiliate', label: 'Affiliates' },
-                { id: 'banking', label: 'Banking/Vault' },
+                { id: 'banking', label: 'Vault' },
                 { id: 'academy', label: 'Academy' }
               ].map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setMobileTab(t.id)}
-                  className={`px-3 py-1 rounded-md whitespace-nowrap font-medium transition ${
-                    mobileTab === t.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                  className={`py-1.5 px-2 rounded-lg font-semibold transition text-center ${
+                    mobileTab === t.id
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-[#131929] text-slate-400 hover:text-white border border-slate-800/80'
                   }`}
                 >
                   {t.label}
@@ -403,7 +513,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Chart */}
+                  {/* Candlestick Chart */}
                   <div className="bg-[#0f1422] rounded-xl border border-slate-800/80 p-3 space-y-2">
                     <div className="flex justify-between items-center text-[10px]">
                       <div className="flex gap-1">
@@ -506,7 +616,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Active Positions */}
+                  {/* Positions */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold uppercase text-slate-400">
                       <span>Open Contracts ({enrichedPositions.length})</span>
@@ -569,7 +679,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 3: SMART PACKAGES / MANAGED POOLS */}
+              {/* TAB 3: SMART PACKAGES */}
               {mobileTab === 'pools' && (
                 <div className="space-y-3">
                   <div className="bg-gradient-to-r from-blue-900/30 to-slate-900 border border-blue-500/20 rounded-xl p-3">
@@ -612,7 +722,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 4: AFFILIATE & COMMUNITY NETWORK */}
+              {/* TAB 4: AFFILIATE */}
               {mobileTab === 'affiliate' && (
                 <div className="space-y-3">
                   <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3.5 space-y-3">
@@ -669,7 +779,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 5: BANKING & INSTANT WITHDRAWAL */}
+              {/* TAB 5: BANKING & VAULT */}
               {mobileTab === 'banking' && (
                 <div className="space-y-3">
                   <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3.5 space-y-3">
@@ -721,10 +831,6 @@ export default function App() {
                         />
                       </div>
 
-                      <div className="text-[10px] text-slate-400 leading-tight">
-                        * Instant card & crypto gateway simulation. Withdrawals processed within 4-6 hours with zero fees.
-                      </div>
-
                       <button
                         type="submit"
                         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition"
@@ -763,6 +869,70 @@ export default function App() {
                           Machine learning algorithms scan real-time order books, identify candlestick patterns, and calculate real-time Value-at-Risk (VaR).
                         </p>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 7: KYC / AML COMPLIANCE */}
+              {mobileTab === 'kyc' && (
+                <div className="space-y-3">
+                  <div className="bg-[#0f1422] border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs font-bold text-white">Identity Verification (KYC)</span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                        user.kycStatus === 'verified'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                      }`}>
+                        {user.kycStatus}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#121826] p-3 rounded-lg border border-slate-800 space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Document Type</label>
+                        <select
+                          value={kycForm.docType}
+                          onChange={(e) => setKycForm({ ...kycForm, docType: e.target.value })}
+                          className="w-full bg-[#182032] border border-slate-700 rounded-lg p-1.5 text-xs text-white"
+                        >
+                          <option>International Passport</option>
+                          <option>National Identity Card</option>
+                          <option>Driver's License</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Document ID Number</label>
+                        <input
+                          type="text"
+                          value={kycForm.idNumber}
+                          onChange={(e) => setKycForm({ ...kycForm, idNumber: e.target.value })}
+                          className="w-full bg-[#182032] border border-slate-700 rounded-lg p-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          setUser({ ...user, kycStatus: 'pending' });
+                          alert('KYC submitted for review.');
+                        }}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-lg text-xs transition mt-1"
+                      >
+                        Submit Documents
+                      </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-[10px] text-slate-500">
+                      <span>Simulator Compliance Override:</span>
+                      <button
+                        onClick={() => setUser({ ...user, kycStatus: user.kycStatus === 'verified' ? 'pending' : 'verified' })}
+                        className="text-blue-400 font-semibold underline"
+                      >
+                        Toggle Status ({user.kycStatus === 'verified' ? 'Revoke' : 'Approve'})
+                      </button>
                     </div>
                   </div>
                 </div>
