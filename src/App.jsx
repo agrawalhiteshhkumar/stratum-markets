@@ -9,8 +9,12 @@ import {
   LogOut, Eye, Shield, Globe, Clock, ChevronRight,
   TrendingDown, Check, ArrowRight, DollarSign, Building,
   PieChart, HelpCircle, Compass, Target, Zap, Download,
-  UploadCloud, AlertTriangle, FileText, CreditCard, CheckCircle
+  UploadCloud, AlertTriangle, FileText, CreditCard, CheckCircle,
+  IndianRupee, ArrowLeftRight
 } from 'lucide-react';
+
+// Live Pegged Exchange Rate (1 USD = 90 INR)
+const USD_INR_RATE = 90.00;
 
 // --- COMMOFX ASSETS ---
 const COMMOFX_ASSETS = [
@@ -49,7 +53,7 @@ const STAFF_ACCOUNTS = [
 export default function App() {
   const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
 
-  // Persistent Client Database (Clean Slate)
+  // Persistent Client Database
   const [usersDb, setUsersDb] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_registered_users');
@@ -90,11 +94,17 @@ export default function App() {
   const [regDocNumber, setRegDocNumber] = useState('');
   const [regFileName, setRegFileName] = useState('');
 
-  // Client Deposit Request Inputs
-  const [depositAmount, setDepositAmount] = useState('500');
-  const [paymentGateway, setPaymentGateway] = useState('UPI / Instant Transfer');
+  // Client Deposit Request Inputs (INR & USD Dual State)
+  const [depositInr, setDepositInr] = useState('90000');
+  const [paymentGateway, setPaymentGateway] = useState('UPI / Instant Transfer (BHIM, GPay, PhonePe)');
   const [txRefNumber, setTxRefNumber] = useState('');
   const [depositNotice, setDepositNotice] = useState('');
+
+  // Converted USD based on INR input
+  const convertedUsd = useMemo(() => {
+    const val = parseFloat(depositInr) || 0;
+    return (val / USD_INR_RATE).toFixed(2);
+  }, [depositInr]);
 
   // Market & Trading State
   const [assets, setAssets] = useState(COMMOFX_ASSETS);
@@ -183,7 +193,6 @@ export default function App() {
     setAuthErrorMessage('');
     const emailClean = inputEmail.trim().toLowerCase();
 
-    // Check staff
     const staffMatch = STAFF_ACCOUNTS.find(
       (s) => s.email.toLowerCase() === emailClean && s.password === inputPassword
     );
@@ -195,7 +204,6 @@ export default function App() {
       return;
     }
 
-    // Check client database
     const customerMatch = usersDb.find(
       (u) => u.email.toLowerCase() === emailClean && u.password === inputPassword
     );
@@ -232,7 +240,7 @@ export default function App() {
       email: emailClean,
       password: inputPassword,
       role: 'customer',
-      balance: 0.00, // Explicitly starts with zero balance
+      balance: 0.00,
       allocatedInPools: 0.00,
       kycStatus: 'pending',
       kycDocument: {
@@ -258,14 +266,16 @@ export default function App() {
     setRegFileName('');
   };
 
-  // Client Submits Fund Request
+  // Client Submits Fund Request (Stores Both INR and USD)
   const handleDepositSubmit = (e) => {
     e.preventDefault();
     setDepositNotice('');
 
-    const parsedAmount = parseFloat(depositAmount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      alert('Please enter a valid deposit amount.');
+    const inrVal = parseFloat(depositInr);
+    const usdVal = parseFloat(convertedUsd);
+
+    if (isNaN(inrVal) || inrVal <= 0) {
+      alert('Please enter a valid deposit amount in INR.');
       return;
     }
 
@@ -279,23 +289,22 @@ export default function App() {
       userId: currentUser.id,
       userName: currentUser.name,
       userEmail: currentUser.email,
-      amount: parsedAmount,
+      amountInr: inrVal,
+      amountUsd: usdVal,
       gateway: paymentGateway,
       txRef: txRefNumber.trim(),
       date: new Date().toISOString().split('T')[0],
       status: 'pending'
     };
 
-    // Add to pending deposit requests
     setDepositRequests([newRequest, ...depositRequests]);
 
-    // Update user ledger to reflect pending status
     const pendingLedgerItem = {
       id: newRequest.id,
       date: newRequest.date,
       type: 'Deposit Request',
-      method: `${paymentGateway} (Ref: ${txRefNumber.trim()})`,
-      amount: parsedAmount,
+      method: `${paymentGateway} (₹${inrVal.toLocaleString('en-IN')})`,
+      amount: usdVal,
       status: 'Pending Admin Approval'
     };
 
@@ -308,15 +317,14 @@ export default function App() {
     setUsersDb(usersDb.map((u) => (u.id === currentUser.id ? updatedUser : u)));
 
     setTxRefNumber('');
-    setDepositNotice(`Deposit request for $${parsedAmount.toLocaleString()} submitted successfully. Funds will reflect in your wallet upon admin approval.`);
+    setDepositNotice(`Deposit request of ₹${inrVal.toLocaleString('en-IN')} (Crediting $${usdVal.toLocaleString()} USD) submitted. Awaiting Super Admin approval.`);
   };
 
-  // Admin Approves Deposit
+  // Admin ACCEPTS Deposit Request
   const handleAdminApproveDeposit = (requestId) => {
     const targetReq = depositRequests.find((r) => r.id === requestId);
     if (!targetReq) return;
 
-    // Update Client Balance and Ledger
     setUsersDb((prev) =>
       prev.map((u) => {
         if (u.id === targetReq.userId) {
@@ -325,7 +333,7 @@ export default function App() {
           );
           return {
             ...u,
-            balance: (u.balance || 0) + targetReq.amount,
+            balance: (u.balance || 0) + targetReq.amountUsd,
             ledger: updatedLedger
           };
         }
@@ -333,15 +341,14 @@ export default function App() {
       })
     );
 
-    // Update Deposit Request status to Approved
     setDepositRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'approved' } : r))
+      prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted' } : r))
     );
   };
 
-  // Admin Rejects Deposit
+  // Admin REJECTS Deposit Request
   const handleAdminRejectDeposit = (requestId) => {
-    const reason = prompt('Enter rejection reason:');
+    const reason = prompt('Enter rejection reason (optional):');
     if (reason === null) return;
 
     const targetReq = depositRequests.find((r) => r.id === requestId);
@@ -351,7 +358,7 @@ export default function App() {
       prev.map((u) => {
         if (u.id === targetReq.userId) {
           const updatedLedger = (u.ledger || []).map((l) =>
-            l.id === targetReq.id ? { ...l, status: `Rejected (${reason || 'Unverified'})` } : l
+            l.id === targetReq.id ? { ...l, status: `Rejected (${reason || 'Payment Unverified'})` } : l
           );
           return { ...u, ledger: updatedLedger };
         }
@@ -395,7 +402,7 @@ export default function App() {
 
     const updated = {
       ...currentUser,
-      balance: currentUser.balance - 2.0, // Commission
+      balance: currentUser.balance - 2.0,
       trades: [newTx, ...(currentUser.trades || [])]
     };
 
@@ -831,7 +838,7 @@ export default function App() {
                 <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-blue-600 shrink-0" />
                   <span>
-                    New accounts start with <strong>$0.00</strong> balance. Fund your wallet anytime via the payment gateway.
+                    New accounts start with <strong>$0.00</strong> balance. Fund your wallet in INR or USD via the payment gateway.
                   </span>
                 </div>
               </div>
@@ -881,8 +888,11 @@ export default function App() {
 
                 <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-xs">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Wallet Equity</span>
+                    <span className="text-slate-500 block text-[10px]">Wallet Equity (USD)</span>
                     <strong className="text-xl text-slate-900">${currentUser.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    <span className="text-[10px] text-slate-400 block font-sans">
+                      ≈ ₹{(currentUser.balance * USD_INR_RATE).toLocaleString('en-IN', { minimumFractionDigits: 2 })} INR
+                    </span>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px]">Managed Pools</span>
@@ -890,6 +900,21 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* KYC LOCKED ALERT BANNER */}
+              {currentUser.kycStatus !== 'verified' && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-l-4 border-amber-500 bg-white p-4 rounded-xl shadow-sm flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-xs text-slate-900">
+                      Trading Disabled: KYC Document Pending Verification
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Your document (<strong>{currentUser.kycDocument?.type}</strong>: {currentUser.kycDocument?.number}) is currently under review by compliance. Buy & Sell orders will unlock once approved.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Navigation Tabs */}
               <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
@@ -1003,7 +1028,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* HELPER ALERTS FOR KYC OR BALANCE */}
+                    {/* ALERTS */}
                     {currentUser.kycStatus !== 'verified' && (
                       <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1052,13 +1077,15 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 2: DEPOSIT / FUND REQUEST WORKFLOW */}
+              {/* TAB 2: DEPOSIT IN INR WITH REAL-TIME USD REFLECTION */}
               {customerTab === 'deposit' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
                     <div>
                       <h3 className="text-base font-bold text-slate-900">Deposit Funds Through Gateway</h3>
-                      <p className="text-xs text-slate-500">Submit a deposit request to credit your live trading equity.</p>
+                      <p className="text-xs text-slate-500">
+                        Enter amount in INR (₹). USD ($) trading credit is calculated automatically in real time.
+                      </p>
                     </div>
 
                     {depositNotice && (
@@ -1076,30 +1103,48 @@ export default function App() {
                           onChange={(e) => setPaymentGateway(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-blue-600 font-semibold text-xs"
                         >
-                          <option value="UPI / Instant Transfer">UPI / Instant Transfer (BHIM, GPay, PhonePe)</option>
-                          <option value="Bank Wire / IMPS">National Bank Wire / IMPS / NEFT</option>
+                          <option value="UPI / Instant Transfer (BHIM, GPay, PhonePe)">UPI / Instant Transfer (BHIM, GPay, PhonePe)</option>
+                          <option value="National Bank Wire / IMPS / NEFT">National Bank Wire / IMPS / NEFT</option>
                           <option value="Crypto USDT (TRC-20)">Crypto Deposit — USDT (TRC-20 Network)</option>
                         </select>
                       </div>
 
-                      <div>
-                        <label className="text-slate-600 block mb-1 font-semibold">Deposit Amount (USD)</label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-2.5 font-bold text-slate-400">$</span>
-                          <input
-                            type="number"
-                            required
-                            min="10"
-                            step="10"
-                            value={depositAmount}
-                            onChange={(e) => setDepositAmount(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3.5 py-2.5 text-slate-900 font-bold focus:outline-none focus:border-blue-600 text-xs font-mono"
-                          />
+                      {/* DUAL INR INPUT & USD REFLECTION BOX */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                        <div>
+                          <label className="text-slate-700 block mb-1 font-bold flex items-center gap-1">
+                            Deposit Amount (INR ₹)
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 font-bold text-slate-400">₹</span>
+                            <input
+                              type="number"
+                              required
+                              min="500"
+                              step="500"
+                              placeholder="90000"
+                              value={depositInr}
+                              onChange={(e) => setDepositInr(e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-xl pl-7 pr-3 py-2 text-slate-900 font-bold focus:outline-none focus:border-blue-600 text-sm font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-slate-700 block mb-1 font-bold flex items-center gap-1 text-emerald-700">
+                            Reflected Wallet Credit (USD $)
+                          </label>
+                          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl px-3.5 py-2 text-slate-900 font-mono flex items-center justify-between">
+                            <span className="text-sm font-black text-emerald-700">${convertedUsd} USD</span>
+                            <span className="text-[10px] text-slate-400">Rate: 1$ = ₹{USD_INR_RATE}</span>
+                          </div>
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-slate-600 block mb-1 font-semibold">Payment Reference / Transaction ID</label>
+                        <label className="text-slate-600 block mb-1 font-semibold">
+                          Payment Reference / UTR Number / UPI Ref ID
+                        </label>
                         <input
                           type="text"
                           required
@@ -1119,10 +1164,11 @@ export default function App() {
                     </form>
                   </div>
 
+                  {/* GATEWAY DETAILS BOX */}
                   <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">Gateway Information</span>
-                      <h4 className="text-lg font-black mt-1">Official Payment Details</h4>
+                      <h4 className="text-lg font-black mt-1">Official Deposit Channels</h4>
                       
                       <div className="space-y-3 mt-4 text-xs font-mono">
                         <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
@@ -1130,14 +1176,20 @@ export default function App() {
                           <strong className="text-amber-400 text-sm">commofx@institutional</strong>
                         </div>
                         <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                          <span className="text-[10px] text-slate-400 font-sans block">Crypto USDT (TRC20)</span>
+                          <span className="text-[10px] text-slate-400 font-sans block">Bank Account (IMPS / NEFT)</span>
+                          <span className="text-slate-200 block">Bank: HDFC Bank Ltd</span>
+                          <span className="text-slate-200 block">A/C: 50200083920194</span>
+                          <span className="text-slate-200 block">IFSC: HDFC0000240</span>
+                        </div>
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                          <span className="text-[10px] text-slate-400 font-sans block">Crypto USDT (TRC-20)</span>
                           <strong className="text-slate-200 text-[11px] break-all">TJX9bWkL4n2Y8qZvR7pM1wX3sA5c8E9Fd2</strong>
                         </div>
                       </div>
                     </div>
 
                     <div className="text-[11px] text-slate-400 border-t border-white/10 pt-3">
-                      Once payment is transferred, submit your transaction reference number. The Super Admin reviews and credits your balance within minutes.
+                      Transfer in INR via UPI or Net Banking. Once submitted with reference ID, your wallet is credited in USD upon Super Admin approval.
                     </div>
                   </div>
                 </div>
@@ -1199,7 +1251,7 @@ export default function App() {
                           <th className="p-3">Date</th>
                           <th className="p-3">Type</th>
                           <th className="p-3">Method / Note</th>
-                          <th className="p-3">Amount</th>
+                          <th className="p-3">Amount (USD)</th>
                           <th className="p-3 text-right">Status</th>
                         </tr>
                       </thead>
@@ -1235,7 +1287,7 @@ export default function App() {
           )}
 
           {/* ======================================================== */}
-          {/* SUB-ADMIN: AUDIT DESK (INSPECTION MODE)                  */}
+          {/* SUB-ADMIN: AUDIT DESK                                    */}
           {/* ======================================================== */}
           {currentUser.role === 'subadmin' && (
             <div className="space-y-6">
@@ -1307,11 +1359,11 @@ export default function App() {
           )}
 
           {/* ======================================================== */}
-          {/* SUPER ADMIN: APPROVE DEPOSITS, KYC & BALANCES            */}
+          {/* SUPER ADMIN: ACCEPT / REJECT DEPOSITS & KYC              */}
           {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="space-y-6">
-              {/* SECTION A: PENDING DEPOSIT REQUESTS QUEUE */}
+              {/* SECTION A: PENDING DEPOSIT REQUESTS QUEUE WITH ACCEPT / REJECT BUTTONS */}
               <div className="bg-white border border-blue-300 rounded-3xl shadow-xl p-8 space-y-4">
                 <div className="flex justify-between items-start border-b border-slate-200 pb-3">
                   <div>
@@ -1319,7 +1371,9 @@ export default function App() {
                       Gateway Deposit Queue
                     </span>
                     <h2 className="text-xl font-black text-slate-900 mt-1">Pending Client Deposit Requests</h2>
-                    <p className="text-xs text-slate-500">Verify payment gateway reference and credit funds to client trading balances.</p>
+                    <p className="text-xs text-slate-500">
+                      Verify transaction reference and choose Accept to credit balance or Reject to decline.
+                    </p>
                   </div>
                   <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
                     {depositRequests.filter((r) => r.status === 'pending').length} Pending
@@ -1333,9 +1387,10 @@ export default function App() {
                         <th className="p-3.5">Request ID</th>
                         <th className="p-3.5">Client</th>
                         <th className="p-3.5">Gateway & Ref</th>
-                        <th className="p-3.5">Amount</th>
+                        <th className="p-3.5">INR Deposited</th>
+                        <th className="p-3.5">USD To Credit</th>
                         <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-right">Actions</th>
+                        <th className="p-3.5 text-right">Decision Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1351,10 +1406,15 @@ export default function App() {
                               <span className="font-bold text-slate-800 block">{req.gateway}</span>
                               <span className="text-[10px] text-blue-600 block">Ref: {req.txRef}</span>
                             </td>
-                            <td className="p-3.5 font-black text-emerald-600 text-sm">${req.amount.toLocaleString()}</td>
+                            <td className="p-3.5 font-bold text-slate-800">
+                              ₹{(req.amountInr || req.amount * USD_INR_RATE).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5 font-black text-emerald-600 text-sm">
+                              ${(req.amountUsd || req.amount).toLocaleString()} USD
+                            </td>
                             <td className="p-3.5">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                req.status === 'approved'
+                                req.status === 'accepted' || req.status === 'approved'
                                   ? 'bg-emerald-50 text-emerald-700'
                                   : req.status === 'rejected'
                                   ? 'bg-rose-50 text-rose-700'
@@ -1368,25 +1428,25 @@ export default function App() {
                                 <>
                                   <button
                                     onClick={() => handleAdminApproveDeposit(req.id)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
                                   >
-                                    Approve & Credit Balance
+                                    Accept (Credit)
                                   </button>
                                   <button
                                     onClick={() => handleAdminRejectDeposit(req.id)}
-                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1 rounded-lg text-[10px] font-bold"
+                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
                                   >
                                     Reject
                                   </button>
                                 </>
                               ) : (
-                                <span className="text-slate-400 text-[10px] italic">Processed</span>
+                                <span className="text-slate-400 text-[10px] italic">Completed</span>
                               )}
                             </td>
                           </tr>
                         ))
                       ) : (
-                        <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No deposit requests submitted yet.</td></tr>
+                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No deposit requests submitted yet.</td></tr>
                       )}
                     </tbody>
                   </table>
