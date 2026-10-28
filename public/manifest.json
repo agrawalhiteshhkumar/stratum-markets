@@ -1,0 +1,16 @@
+{
+  "short_name": "CommoFx",
+  "name": "COMMOFX — Client-First Financial Solutions",
+  "icons": [
+    {
+      "src": "/commofx-logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "display": "standalone",
+  "orientation": "portrait"
+}
