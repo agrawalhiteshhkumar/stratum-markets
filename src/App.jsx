@@ -8,10 +8,11 @@ import {
   Lock, Settings, UserCheck, UserX, Database, Sliders,
   LogOut, Eye, Shield, Globe, Clock, ChevronRight,
   TrendingDown, Check, ArrowRight, DollarSign, Building,
-  PieChart, HelpCircle, Compass, Target, Zap, Download
+  PieChart, HelpCircle, Compass, Target, Zap, Download,
+  UploadCloud, AlertTriangle, FileText
 } from 'lucide-react';
 
-// --- COMMOFX EXACT PORTFOLIO ASSETS ---
+// --- COMMOFX ASSETS ---
 const COMMOFX_ASSETS = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', category: 'Forex', price: 1.0845, change: -0.21, spread: 0.0002, decimals: 4 },
   { symbol: 'GBP/USD', name: 'British Pound / USD', category: 'Forex', price: 1.2715, change: 0.15, spread: 0.0004, decimals: 4 },
@@ -27,7 +28,7 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// Internal staff credentials (Unified Single Sign-in)
+// Internal staff accounts
 const STAFF_ACCOUNTS = [
   {
     id: 'STAFF-SUB',
@@ -70,16 +71,21 @@ export default function App() {
   const [inputName, setInputName] = useState('');
   const [authErrorMessage, setAuthErrorMessage] = useState('');
 
+  // Registration KYC Document States
+  const [regDocType, setRegDocType] = useState('PAN Card');
+  const [regDocNumber, setRegDocNumber] = useState('');
+  const [regFileName, setRegFileName] = useState('');
+
   // Market & Trading State
   const [assets, setAssets] = useState(COMMOFX_ASSETS);
-  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]); // Gold
+  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
   const [tradeUnits, setTradeUnits] = useState(1.0);
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
   const [customerTab, setCustomerTab] = useState('trade');
 
-  // PWA Install Prompt
+  // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
@@ -122,7 +128,17 @@ export default function App() {
     if (fresh) setSelectedAsset(fresh);
   }, [assets, selectedAsset.symbol]);
 
-  // SVG Candlestick Generator
+  // Keep active user session in sync with usersDb updates (e.g., when KYC approved by admin)
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'customer') {
+      const updated = usersDb.find((u) => u.id === currentUser.id);
+      if (updated && updated.kycStatus !== currentUser.kycStatus) {
+        setCurrentUser(updated);
+      }
+    }
+  }, [usersDb, currentUser]);
+
+  // Candlestick points
   const candleData = useMemo(() => {
     const points = [];
     let base = selectedAsset.price * 0.985;
@@ -139,13 +155,13 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  // SINGLE UNIFIED LOGIN (AUTO ROLE DETECTION)
+  // Single Sign-In Handler
   const handleUnifiedSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
     const emailClean = inputEmail.trim().toLowerCase();
 
-    // Check internal staff
+    // Check staff
     const staffMatch = STAFF_ACCOUNTS.find(
       (s) => s.email.toLowerCase() === emailClean && s.password === inputPassword
     );
@@ -172,14 +188,19 @@ export default function App() {
     setAuthErrorMessage('Invalid email or password. Please verify your credentials or register a new account.');
   };
 
-  // Client Registration
-  const handleRegisterSubmit = (e) => {
+  // Client Registration WITH KYC Document Attachment
+  const handleRegisterWithKyc = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
     const emailClean = inputEmail.trim().toLowerCase();
 
     if (usersDb.some((u) => u.email.toLowerCase() === emailClean) || STAFF_ACCOUNTS.some((s) => s.email.toLowerCase() === emailClean)) {
       setAuthErrorMessage('An account with this email already exists. Please Sign In.');
+      return;
+    }
+
+    if (!regDocNumber.trim()) {
+      setAuthErrorMessage('Please enter your document identification number.');
       return;
     }
 
@@ -191,9 +212,14 @@ export default function App() {
       role: 'customer',
       balance: 10000.00,
       allocatedInPools: 0.00,
-      kycStatus: 'pending',
+      kycStatus: 'pending', // Starts pending until approved
+      kycDocument: {
+        type: regDocType,
+        number: regDocNumber.trim(),
+        filename: regFileName || `${regDocType.replace(/\s+/g, '_')}_Document.pdf`,
+        submittedAt: new Date().toISOString().split('T')[0]
+      },
       referralCode: `CFX-${Math.floor(10000 + Math.random() * 90000)}`,
-      referralEarnings: 0.00,
       trades: [],
       ledger: [
         { id: `INIT-${Math.floor(100 + Math.random() * 900)}`, date: new Date().toISOString().split('T')[0], type: 'Account Setup', method: 'System Credit', amount: 10000.00, status: 'Active' }
@@ -206,11 +232,19 @@ export default function App() {
     setInputEmail('');
     setInputPassword('');
     setInputName('');
+    setRegDocNumber('');
+    setRegFileName('');
   };
 
-  // Customer Trading Actions
+  // Trade Execution (Strictly locked if KYC is pending)
   const handleExecuteTrade = () => {
     if (!currentUser || currentUser.role !== 'customer') return;
+
+    if (currentUser.kycStatus !== 'verified') {
+      alert('Trading Locked: Your KYC document verification is pending review. Buy & Sell orders will unlock once approved by compliance.');
+      return;
+    }
+
     const reqMargin = (selectedAsset.price * tradeUnits) / tradeLeverage;
     if (reqMargin > currentUser.balance) {
       alert('Insufficient wallet margin.');
@@ -256,12 +290,12 @@ export default function App() {
   };
 
   const handleAdminToggleKyc = (userId, currentKyc) => {
-    const toggled = currentKyc === 'verified' ? 'pending' : 'verified';
-    setUsersDb(usersDb.map((u) => (u.id === userId ? { ...u, kycStatus: toggled } : u)));
+    const nextStatus = currentKyc === 'verified' ? 'pending' : 'verified';
+    setUsersDb(usersDb.map((u) => (u.id === userId ? { ...u, kycStatus: nextStatus } : u)));
   };
 
   const handleAdminDeleteUser = (userId) => {
-    if (!confirm('Are you sure you want to delete this client?')) return;
+    if (!confirm('Are you sure you want to remove this client?')) return;
     setUsersDb(usersDb.filter((u) => u.id !== userId));
   };
 
@@ -353,15 +387,11 @@ export default function App() {
         </div>
       </header>
 
-      {/* ======================================================== */}
-      {/* 1. SIMPLE, ELEGANT LANDING PAGE                          */}
-      {/* ======================================================== */}
+      {/* 1. PUBLIC WEBSITE */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-16 pb-20">
-          {/* HERO BANNER */}
           <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-14 pb-14 border-b border-slate-200">
             <div className="max-w-4xl mx-auto px-4 text-center space-y-6">
-              
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/80 border border-blue-200 text-blue-800 text-[11px] font-bold tracking-wide uppercase">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                 COMMOFX • Client-First Financial Solutions
@@ -393,7 +423,7 @@ export default function App() {
             </div>
           </section>
 
-          {/* SIMPLIFIED 4-STEP LIFECYCLE (WHAT WE DO) */}
+          {/* 4-STEP PROCESS */}
           <section className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="text-center space-y-1 mb-8">
               <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Financial Discipline</span>
@@ -416,7 +446,7 @@ export default function App() {
             </div>
           </section>
 
-          {/* SIMPLIFIED ASSET CHIPS */}
+          {/* ASSET CHIPS */}
           <section className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6">
             <div className="text-center space-y-1">
               <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Market Coverage</span>
@@ -424,7 +454,6 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Currencies */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <h3 className="font-bold text-slate-900 text-xs">Currencies (Forex)</h3>
@@ -439,7 +468,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Commodities */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <h3 className="font-bold text-slate-900 text-xs">Commodities</h3>
@@ -454,7 +482,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Indices */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <h3 className="font-bold text-slate-900 text-xs">Major Indices</h3>
@@ -495,15 +522,13 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 2. SINGLE UNIFIED SIGN-IN PAGE                           */}
-      {/* ======================================================== */}
+      {/* 2. UNIFIED SIGN-IN PAGE */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
             <div className="text-center space-y-1">
               <h2 className="text-2xl font-black text-slate-900">Sign In</h2>
-              <p className="text-xs text-slate-500">Enter your email and password to continue</p>
+              <p className="text-xs text-slate-500">Enter your email and password to access your portal</p>
             </div>
 
             {authErrorMessage && (
@@ -548,22 +573,20 @@ export default function App() {
             <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
               New client?{' '}
               <button onClick={() => { setActiveView('register'); setAuthErrorMessage(''); }} className="text-blue-600 font-bold hover:underline">
-                Create an Account
+                Create an Account (KYC Required)
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 3. CLIENT REGISTRATION PAGE                              */}
-      {/* ======================================================== */}
+      {/* 3. CLIENT REGISTRATION WITH KYC DOCUMENT UPLOAD */}
       {activeView === 'register' && (
-        <div className="flex-1 flex items-center justify-center p-4 py-16">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
+        <div className="flex-1 flex items-center justify-center p-4 py-12">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg p-8 shadow-2xl space-y-6">
             <div className="text-center space-y-1">
               <h2 className="text-2xl font-black text-slate-900">Create Client Account</h2>
-              <p className="text-xs text-slate-500">Access live execution across currencies & metals</p>
+              <p className="text-xs text-slate-500">Attach verification documents for regulatory compliance</p>
             </div>
 
             {authErrorMessage && (
@@ -572,48 +595,121 @@ export default function App() {
               </div>
             )}
 
-            <form onSubmit={handleRegisterSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Full Legal Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Johnathan Smith"
-                  value={inputName}
-                  onChange={(e) => setInputName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
-                />
+            <form onSubmit={handleRegisterWithKyc} className="space-y-4 text-xs">
+              {/* Account Credentials */}
+              <div className="space-y-3">
+                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block border-b border-slate-100 pb-1">
+                  1. Personal & Login Details
+                </span>
+                <div>
+                  <label className="text-slate-600 block mb-1 font-semibold">Full Legal Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Johnathan Smith"
+                    value={inputName}
+                    onChange={(e) => setInputName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-600 block mb-1 font-semibold">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="name@domain.com"
+                      value={inputEmail}
+                      onChange={(e) => setInputEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-600 block mb-1 font-semibold">Password</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••••••"
+                      value={inputPassword}
+                      onChange={(e) => setInputPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@domain.com"
-                  value={inputEmail}
-                  onChange={(e) => setInputEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
-                />
-              </div>
+              {/* KYC Document Upload Section */}
+              <div className="space-y-3 pt-2">
+                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block border-b border-slate-100 pb-1">
+                  2. Mandatory KYC Document Upload
+                </span>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-600 block mb-1 font-semibold">Document Type</label>
+                    <select
+                      value={regDocType}
+                      onChange={(e) => setRegDocType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 text-xs font-semibold"
+                    >
+                      <option value="PAN Card">PAN Card</option>
+                      <option value="Aadhaar Card">Aadhaar Card</option>
+                      <option value="Passport">Passport</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-slate-600 block mb-1 font-semibold">
+                      {regDocType} Identification Number
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={`Enter your ${regDocType} number`}
+                      value={regDocNumber}
+                      onChange={(e) => setRegDocNumber(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs font-mono uppercase"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••••••"
-                  value={inputPassword}
-                  onChange={(e) => setInputPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
-                />
+                {/* File Attachment Input */}
+                <div>
+                  <label className="text-slate-600 block mb-1 font-semibold">Attach Document Proof (PDF / Image)</label>
+                  <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-3 text-center transition bg-slate-50/50 cursor-pointer relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setRegFileName(e.target.files[0].name);
+                        }
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <UploadCloud className="w-5 h-5 text-blue-600" />
+                      <span className="text-[11px] font-bold text-slate-700">
+                        {regFileName ? regFileName : 'Click to select file (PDF, PNG, JPG)'}
+                      </span>
+                      <span className="text-[10px] text-slate-400">Max size: 10MB</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Notice: Buy/Sell trading orders remain <strong>locked</strong> until this document is reviewed and approved by compliance.
+                  </span>
+                </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-blue-500/20"
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-blue-500/20 mt-2"
               >
-                Register & Open Terminal
+                Submit Registration & Documents
               </button>
             </form>
 
@@ -627,21 +723,26 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN                */}
-      {/* ======================================================== */}
+      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* CUSTOMER WORKSPACE */}
+          {/* ======================================================== */}
+          {/* CUSTOMER WORKSPACE                                       */}
+          {/* ======================================================== */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
+              {/* Account Header with Status Banner */}
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">Private Trader Workspace</span>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">Trader Account</span>
                   <h2 className="text-2xl font-black text-slate-900 mt-0.5">{currentUser.name}</h2>
                   <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-1">
-                    <span>{currentUser.email}</span> • <span>Account: {currentUser.id}</span> •{' '}
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${currentUser.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                    <span>{currentUser.email}</span> • <span>ID: {currentUser.id}</span> •{' '}
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      currentUser.kycStatus === 'verified'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
                       KYC: {currentUser.kycStatus}
                     </span>
                   </div>
@@ -649,20 +750,35 @@ export default function App() {
 
                 <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-xs">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Your Available Cash</span>
+                    <span className="text-slate-500 block text-[10px]">Wallet Equity</span>
                     <strong className="text-xl text-slate-900">${currentUser.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Active Managed Equity</span>
+                    <span className="text-slate-500 block text-[10px]">Managed Pools</span>
                     <strong className="text-xl text-blue-600">${currentUser.allocatedInPools.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                   </div>
                 </div>
               </div>
 
+              {/* KYC LOCKED ALERT BANNER */}
+              {currentUser.kycStatus !== 'verified' && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-l-4 border-amber-500 bg-white p-4 rounded-xl shadow-sm flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-xs text-slate-900">
+                      Trading Disabled: KYC Document Pending Verification
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Your registered document (<strong>{currentUser.kycDocument?.type}</strong>: {currentUser.kycDocument?.number}) is currently under review by compliance. Buy & Sell orders will unlock automatically once approved.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
                 {[
                   { id: 'trade', label: 'Trading Desk' },
-                  { id: 'portfolio', label: `My Open Contracts (${currentUser.trades ? currentUser.trades.length : 0})` },
+                  { id: 'portfolio', label: `My Contracts (${currentUser.trades ? currentUser.trades.length : 0})` },
                   { id: 'wallet', label: 'Personal Ledger' }
                 ].map((t) => (
                   <button
@@ -675,6 +791,7 @@ export default function App() {
                 ))}
               </div>
 
+              {/* TRADING DESK */}
               {customerTab === 'trade' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
@@ -738,18 +855,32 @@ export default function App() {
                           <option value="50">50x Prime</option>
                         </select>
                       </div>
+
+                      {/* EXECUTION BUTTONS - DISABLED IF KYC IS NOT VERIFIED */}
                       <div className="flex items-end gap-2">
                         <button
                           onClick={() => { setTradeSide('BUY'); handleExecuteTrade(); }}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs"
+                          disabled={currentUser.kycStatus !== 'verified'}
+                          className={`flex-1 font-bold py-2 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
+                            currentUser.kycStatus === 'verified'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
                         >
-                          BUY / LONG
+                          {currentUser.kycStatus !== 'verified' && <Lock className="w-3 h-3" />}
+                          BUY
                         </button>
                         <button
                           onClick={() => { setTradeSide('SELL'); handleExecuteTrade(); }}
-                          className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-lg text-xs"
+                          disabled={currentUser.kycStatus !== 'verified'}
+                          className={`flex-1 font-bold py-2 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
+                            currentUser.kycStatus === 'verified'
+                              ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'
+                              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
                         >
-                          SELL / SHORT
+                          {currentUser.kycStatus !== 'verified' && <Lock className="w-3 h-3" />}
+                          SELL
                         </button>
                       </div>
                     </div>
@@ -816,7 +947,7 @@ export default function App() {
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Place an order on the Trading Desk.</td></tr>
+                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -862,7 +993,9 @@ export default function App() {
             </div>
           )}
 
-          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY) */}
+          {/* ======================================================== */}
+          {/* SUB-ADMIN: AUDIT DESK (READ ONLY DOCUMENT INSPECTOR)     */}
+          {/* ======================================================== */}
           {currentUser.role === 'subadmin' && (
             <div className="bg-white border border-amber-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -870,8 +1003,8 @@ export default function App() {
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
                     CommoFx Compliance & Audit Desk (Sub-Admin)
                   </span>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">Client Accounts Registry</h2>
-                  <p className="text-xs text-slate-500">Inspection mode only. Sub-admin privileges do not authorize records modification or balance updates.</p>
+                  <h2 className="text-2xl font-black text-slate-900 mt-1">Client Verification & Documents Queue</h2>
+                  <p className="text-xs text-slate-500">Inspection mode only. Review submitted PAN / Aadhaar documentation.</p>
                 </div>
                 <div className="bg-amber-50 text-amber-800 px-3 py-1.5 rounded-lg border border-amber-200 text-xs font-semibold flex items-center gap-1.5">
                   <Eye className="w-4 h-4" /> Non-Editable Mode
@@ -883,11 +1016,11 @@ export default function App() {
                   <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                     <tr>
                       <th className="p-3.5">User ID</th>
-                      <th className="p-3.5">Customer Name</th>
+                      <th className="p-3.5">Customer</th>
                       <th className="p-3.5">Email</th>
-                      <th className="p-3.5">Wallet Balance</th>
-                      <th className="p-3.5">KYC</th>
-                      <th className="p-3.5 text-right">Privilege</th>
+                      <th className="p-3.5">Document Details</th>
+                      <th className="p-3.5">KYC Status</th>
+                      <th className="p-3.5 text-right">Trading Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -897,19 +1030,33 @@ export default function App() {
                           <td className="p-3.5 text-slate-400">{u.id}</td>
                           <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
                           <td className="p-3.5 text-slate-600">{u.email}</td>
-                          <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
                           <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                            <span className="font-bold text-slate-800 block">{u.kycDocument?.type || 'No Document'}</span>
+                            <span className="text-[10px] text-slate-500 font-mono block">Doc: {u.kycDocument?.number || 'N/A'}</span>
+                            <span className="text-[10px] text-blue-600 font-mono block flex items-center gap-1">
+                              <FileText className="w-3 h-3" /> {u.kycDocument?.filename || 'proof.pdf'}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              u.kycStatus === 'verified'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
                               {u.kycStatus}
                             </span>
                           </td>
-                          <td className="p-3.5 text-right text-slate-400 font-sans italic text-[11px]">
-                            Locked (Audit)
+                          <td className="p-3.5 text-right font-sans font-semibold text-[11px]">
+                            {u.kycStatus === 'verified' ? (
+                              <span className="text-emerald-600">Trading Active</span>
+                            ) : (
+                              <span className="text-rose-600">Locked</span>
+                            )}
                           </td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No clients registered in the system yet.</td></tr>
+                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No clients registered yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -917,7 +1064,9 @@ export default function App() {
             </div>
           )}
 
-          {/* SUPER ADMIN: FULL CONTROL */}
+          {/* ======================================================== */}
+          {/* SUPER ADMIN: APPROVE / REVOKE KYC & MUTATE BALANCES      */}
+          {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -925,39 +1074,27 @@ export default function App() {
                   <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
                     Super Admin Root Terminal
                   </span>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">Master Platform Governance</h2>
-                  <p className="text-xs text-slate-500">Full administrative authority to manage real clients, balances, and verification.</p>
+                  <h2 className="text-2xl font-black text-slate-900 mt-1">Master KYC Clearance & Balances</h2>
+                  <p className="text-xs text-slate-500">Approve client documents to unlock trading or revoke access.</p>
                 </div>
                 <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
-                  <Shield className="w-4 h-4" /> Root Privileges Active
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-purple-50/60 border border-purple-200 rounded-2xl p-4">
-                  <span className="text-[10px] text-purple-600 block uppercase font-bold">Total Clients Registered</span>
-                  <span className="text-2xl font-black font-mono text-purple-950">{usersDb.length}</span>
-                </div>
-                <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4">
-                  <span className="text-[10px] text-blue-600 block uppercase font-bold">Total Client Funds</span>
-                  <span className="text-2xl font-black font-mono text-blue-950">
-                    ${usersDb.reduce((acc, u) => acc + (u.balance || 0), 0).toLocaleString()}
-                  </span>
+                  <Shield className="w-4 h-4" /> Root Clearance
                 </div>
               </div>
 
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-3.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-800 flex justify-between items-center">
-                  <span>Client Balance & KYC Manager</span>
-                  <span className="text-[11px] text-purple-600 font-medium">Real-time database editor</span>
+                  <span>Client Submissions & Actions</span>
+                  <span className="text-[11px] text-purple-600 font-medium">Click Approve KYC to unlock client trading</span>
                 </div>
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-white text-slate-500 border-b border-slate-200">
                     <tr>
                       <th className="p-3.5">Client</th>
                       <th className="p-3.5">Email</th>
+                      <th className="p-3.5">Submitted Document</th>
                       <th className="p-3.5">Balance</th>
-                      <th className="p-3.5">KYC</th>
+                      <th className="p-3.5">KYC Status</th>
                       <th className="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -967,24 +1104,39 @@ export default function App() {
                         <tr key={u.id} className="hover:bg-slate-50">
                           <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
                           <td className="p-3.5 text-slate-600">{u.email}</td>
+                          <td className="p-3.5">
+                            <span className="font-bold text-slate-800 block">{u.kycDocument?.type || 'No Document'}</span>
+                            <span className="text-[10px] text-slate-500 font-mono block">Doc: {u.kycDocument?.number || 'N/A'}</span>
+                            <span className="text-[10px] text-blue-600 font-mono block flex items-center gap-1">
+                              <FileText className="w-3 h-3" /> {u.kycDocument?.filename || 'proof.pdf'}
+                            </span>
+                          </td>
                           <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
                           <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              u.kycStatus === 'verified'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
                               {u.kycStatus}
                             </span>
                           </td>
                           <td className="p-3.5 text-right space-x-2">
                             <button
+                              onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold text-white transition ${
+                                u.kycStatus === 'verified'
+                                  ? 'bg-amber-600 hover:bg-amber-700'
+                                  : 'bg-emerald-600 hover:bg-emerald-700'
+                              }`}
+                            >
+                              {u.kycStatus === 'verified' ? 'Revoke KYC (Lock)' : 'Approve KYC (Unlock)'}
+                            </button>
+                            <button
                               onClick={() => handleAdminModifyBalance(u.id)}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
                             >
                               Edit Balance
-                            </button>
-                            <button
-                              onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
-                              className="bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
-                            >
-                              {u.kycStatus === 'verified' ? 'Revoke KYC' : 'Approve KYC'}
                             </button>
                             <button
                               onClick={() => handleAdminDeleteUser(u.id)}
@@ -996,7 +1148,7 @@ export default function App() {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="5" className="p-6 text-center text-slate-400 font-sans">No client records registered yet.</td></tr>
+                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No client records registered yet.</td></tr>
                     )}
                   </tbody>
                 </table>
