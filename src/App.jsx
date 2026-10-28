@@ -106,7 +106,7 @@ const STAFF_ACCOUNTS = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('website');
+  const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
   const [usersDb, setUsersDb] = useState(INITIAL_USERS_DB);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -126,18 +126,11 @@ export default function App() {
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsInstallable(true);
-    });
-
-    window.addEventListener('appinstalled', () => {
-      setIsInstallable(false);
-      setDeferredPrompt(null);
     });
   }, []);
 
@@ -147,10 +140,8 @@ export default function App() {
       return;
     }
     deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsInstallable(false);
-    }
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
   };
 
   useEffect(() => {
@@ -301,22 +292,26 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* GLOBAL NAVBAR WITH COMMOFX LOGO & DOWNLOAD BUTTON */}
+      {/* NAVBAR WITH ELEVATED BRAND EMBLEM */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
-          {/* Logo with clean Fallback */}
-          <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left">
-            <img
-              src="/commofx-logo.png"
-              alt="COMMOFX"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-              className="h-10 w-auto object-contain max-w-[170px]"
-            />
-            <div className="leading-tight">
-              <span className="font-extrabold text-lg tracking-tight text-blue-950 block">commofx</span>
-              <span className="text-[9px] text-blue-600 font-bold uppercase tracking-widest block">COMMO FOREX</span>
+          {/* Framed Pill Emblem (Eliminates the raw rectangle look) */}
+          <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left group">
+            <div className="h-10 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-xl flex items-center justify-center shadow-md shadow-slate-900/10 group-hover:border-amber-400 transition">
+              <img
+                src="/commofx-logo.png"
+                alt="COMMOFX"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                className="h-7 w-auto object-contain"
+              />
+            </div>
+            <div>
+              <span className="font-black text-lg tracking-tight text-blue-950 block leading-none">
+                COMMOFX
+              </span>
+              <span className="text-[9px] text-blue-600 font-bold uppercase tracking-widest block mt-0.5">
+                CLIENT-FIRST FINANCIAL SOLUTIONS
+              </span>
             </div>
           </button>
 
@@ -328,13 +323,11 @@ export default function App() {
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">How FX Works</button>
           </nav>
 
-          {/* Right Header Actions */}
+          {/* Actions */}
           <div className="flex items-center gap-2.5">
-            {/* Install / Download App Button (Like Quiz AI) */}
             <button
               onClick={handleInstallClick}
               className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-              title="Install CommoFx app on this device"
             >
               <Download className="w-3.5 h-3.5 text-amber-600" />
               <span>Install App</span>
@@ -344,16 +337,9 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setActiveView('portal')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 shadow-sm ${
-                    currentUser.role === 'admin'
-                      ? 'bg-purple-50 text-purple-700 border-purple-200'
-                      : currentUser.role === 'subadmin'
-                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                      : 'bg-blue-50 text-blue-700 border-blue-200'
-                  }`}
+                  className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  {currentUser.role.toUpperCase()}
+                  {currentUser.role.toUpperCase()} WORKSPACE
                 </button>
                 <button
                   onClick={() => { setCurrentUser(null); setActiveView('website'); }}
@@ -404,24 +390,26 @@ export default function App() {
       {/* 1. PUBLIC WEBSITE */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-16 pb-20">
-          {/* HERO SECTION WITH LARGE LOGO DISPLAY */}
+          {/* HERO SECTION WITH POLISHED SHIELD EMBLEM */}
           <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-10 pb-16 border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center space-y-6">
-              {/* Centered Large Emblem */}
-              <div className="flex justify-center">
+              
+              {/* Framed Glowing Card (Seamless Integration) */}
+              <div className="inline-block p-2 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-400/30 shadow-2xl shadow-blue-900/15">
                 <img
                   src="/commofx-logo.png"
-                  alt="COMMOFX Client-First Financial Solutions"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                  className="h-28 sm:h-36 w-auto object-contain drop-shadow-xl"
+                  alt="COMMOFX"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="h-28 sm:h-36 w-auto object-contain rounded-2xl"
                 />
               </div>
 
-              <span className="bg-blue-100 text-blue-800 border border-blue-200 text-xs px-3.5 py-1 rounded-full font-bold uppercase tracking-wider inline-block">
-                COMMOFX • Client-First Financial Solutions
-              </span>
+              <div>
+                <span className="bg-blue-100 text-blue-800 border border-blue-200 text-xs px-3.5 py-1 rounded-full font-bold uppercase tracking-wider inline-block">
+                  COMMOFX • CLIENT-FIRST FINANCIAL SOLUTIONS
+                </span>
+              </div>
+
               <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight leading-tight max-w-4xl mx-auto">
                 Transforming the Global <br />
                 <span className="text-blue-600">Forex & Commodities Landscape</span>
@@ -663,14 +651,14 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
             <div className="text-center space-y-2">
-              <img
-                src="/commofx-logo.png"
-                alt="CommoFx"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-                className="h-16 w-auto mx-auto object-contain"
-              />
+              <div className="inline-block p-1.5 rounded-2xl bg-slate-950 border border-amber-400/30">
+                <img
+                  src="/commofx-logo.png"
+                  alt="CommoFx"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="h-14 w-auto mx-auto object-contain"
+                />
+              </div>
               <h2 className="text-2xl font-black text-slate-900">Portal Login</h2>
               <p className="text-xs text-slate-500">Sign in to your designated workspace</p>
             </div>
@@ -795,14 +783,14 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
             <div className="text-center space-y-2">
-              <img
-                src="/commofx-logo.png"
-                alt="CommoFx"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-                className="h-16 w-auto mx-auto object-contain"
-              />
+              <div className="inline-block p-1.5 rounded-2xl bg-slate-950 border border-amber-400/30">
+                <img
+                  src="/commofx-logo.png"
+                  alt="CommoFx"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="h-14 w-auto mx-auto object-contain"
+                />
+              </div>
               <h2 className="text-2xl font-black text-slate-900">Create CommoFx Account</h2>
               <p className="text-xs text-slate-500">Instant access to $100,000 simulated capital</p>
             </div>
@@ -1055,7 +1043,7 @@ export default function App() {
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Use Trade Execution to place orders.</td></tr>
+                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1257,14 +1245,14 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 mt-auto py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-3">
-            <img
-              src="/commofx-logo.png"
-              alt="COMMOFX"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-              className="h-8 w-auto object-contain"
-            />
+            <div className="h-8 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-lg flex items-center justify-center">
+              <img
+                src="/commofx-logo.png"
+                alt="COMMOFX"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                className="h-5 w-auto object-contain"
+              />
+            </div>
             <div>
               <strong className="text-slate-800 font-bold">COMMOFX</strong> — COMMO FOREX
               <p className="text-[11px] text-slate-400">Direct Interbank Liquidity & Commodities Fund Management</p>
