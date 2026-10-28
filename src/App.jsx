@@ -8,11 +8,10 @@ import {
   Lock, Settings, UserCheck, UserX, Database, Sliders,
   LogOut, Eye, Shield, Globe, Clock, ChevronRight,
   TrendingDown, Check, ArrowRight, DollarSign, Building,
-  PieChart, HelpCircle, Compass, Target, Zap, Download
+  PieChart, HelpCircle, Compass, Target, Zap, Download, KeyRound
 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 
-// --- COMMOFX EXACT PORTFOLIO ASSETS ---
+// --- COMMOFX INSTRUMENTS ---
 const COMMOFX_ASSETS = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', category: 'Forex', price: 1.0845, change: -0.21, spread: 0.0002, decimals: 4 },
   { symbol: 'GBP/USD', name: 'British Pound / USD', category: 'Forex', price: 1.2715, change: 0.15, spread: 0.0004, decimals: 4 },
@@ -28,77 +27,18 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// --- INITIAL REGISTERED CLIENTS DATABASE ---
-const INITIAL_USERS_DB = [
-  {
-    id: 'CFX-101',
-    name: 'Rahul Sharma',
-    email: 'rahul@client.com',
-    password: 'password123',
-    role: 'customer',
-    balance: 85400.00,
-    allocatedInPools: 15000.00,
-    kycStatus: 'verified',
-    referralCode: 'CFX-RAHUL',
-    referralEarnings: 2150.00,
-    trades: [
-      { id: 'TX-801', symbol: 'XAU/USD', side: 'BUY', units: 1.5, leverage: 10, entryPrice: 2335.20 },
-      { id: 'TX-802', symbol: 'EUR/USD', side: 'BUY', units: 2.0, leverage: 20, entryPrice: 1.0820 }
-    ],
-    ledger: [
-      { id: 'LED-01', date: '2026-10-20', type: 'Deposit', amount: 50000, method: 'National Wire', status: 'Approved' },
-      { id: 'LED-02', date: '2026-10-25', type: 'Deposit', amount: 35400, method: 'USDT (TRC20)', status: 'Approved' }
-    ]
-  },
-  {
-    id: 'CFX-102',
-    name: 'Pooja Patel',
-    email: 'pooja@client.com',
-    password: 'password123',
-    role: 'customer',
-    balance: 42000.00,
-    allocatedInPools: 5000.00,
-    kycStatus: 'pending',
-    referralCode: 'CFX-POOJA',
-    referralEarnings: 620.00,
-    trades: [
-      { id: 'TX-803', symbol: 'USO/USD', side: 'SELL', units: 3.0, leverage: 10, entryPrice: 82.50 }
-    ],
-    ledger: [
-      { id: 'LED-03', date: '2026-10-22', type: 'Deposit', amount: 42000, method: 'Crypto Transfer', status: 'Approved' }
-    ]
-  },
-  {
-    id: 'CFX-103',
-    name: 'Amit Deshmukh',
-    email: 'amit@client.com',
-    password: 'password123',
-    role: 'customer',
-    balance: 145000.00,
-    allocatedInPools: 25000.00,
-    kycStatus: 'verified',
-    referralCode: 'CFX-AMIT',
-    referralEarnings: 4800.00,
-    trades: [
-      { id: 'TX-804', symbol: 'US30', side: 'BUY', units: 1.0, leverage: 10, entryPrice: 38950.00 }
-    ],
-    ledger: [
-      { id: 'LED-04', date: '2026-10-18', type: 'Deposit', amount: 145000, method: 'Prime Transfer', status: 'Approved' }
-    ]
-  }
-];
-
+// Internal staff credentials (Never displayed to customers)
 const STAFF_ACCOUNTS = [
   {
-    id: 'STAFF-AUDIT',
-    name: 'Compliance Sub-Admin',
+    id: 'STAFF-SUB',
+    name: 'Compliance Officer',
     email: 'subadmin@commofx.com',
     password: 'subadminpass',
     role: 'subadmin'
   },
   {
-    id: 'STAFF-ADMIN',
-    name: 'Managing Director & Super Admin',
+    id: 'STAFF-SUPER',
+    name: 'Root Administrator',
     email: 'admin@commofx.com',
     password: 'adminpass',
     role: 'admin'
@@ -106,25 +46,41 @@ const STAFF_ACCOUNTS = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
-  const [usersDb, setUsersDb] = useState(INITIAL_USERS_DB);
+  // Navigation: 'website' | 'signin' | 'register' | 'portal' | 'staff_auth'
+  const [activeView, setActiveView] = useState('website');
+
+  // Clean Slate Customers DB - persistent in browser localStorage
+  const [usersDb, setUsersDb] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cfx_registered_users');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cfx_registered_users', JSON.stringify(usersDb));
+  }, [usersDb]);
+
   const [currentUser, setCurrentUser] = useState(null);
 
-  const [selectedRole, setSelectedRole] = useState('customer');
+  // Authentication Fields
   const [inputEmail, setInputEmail] = useState('');
   const [inputPassword, setInputPassword] = useState('');
   const [inputName, setInputName] = useState('');
   const [authErrorMessage, setAuthErrorMessage] = useState('');
 
+  // Market & Trading State
   const [assets, setAssets] = useState(COMMOFX_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
   const [tradeUnits, setTradeUnits] = useState(1.0);
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
-  const [customerTab, setCustomerTab] = useState('trade');
+  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'portfolio' | 'wallet'
 
-  // PWA Install Prompt State
+  // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
@@ -136,7 +92,7 @@ export default function App() {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      alert('To install CommoFx app on your phone, open your browser menu and tap "Add to Home screen".');
+      alert('To install CommoFx app on mobile: Tap your browser menu and choose "Add to Home screen".');
       return;
     }
     deferredPrompt.prompt();
@@ -144,6 +100,7 @@ export default function App() {
     setDeferredPrompt(null);
   };
 
+  // Live price fluctuations
   useEffect(() => {
     const interval = setInterval(() => {
       setAssets((prev) =>
@@ -166,6 +123,7 @@ export default function App() {
     if (fresh) setSelectedAsset(fresh);
   }, [assets, selectedAsset.symbol]);
 
+  // SVG Candlestick Generator
   const candleData = useMemo(() => {
     const points = [];
     let base = selectedAsset.price * 0.985;
@@ -182,64 +140,82 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  const handleSignIn = (e) => {
+  // Client Sign In Handler (Normal Customers)
+  const handleCustomerSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
 
-    if (selectedRole === 'admin' || selectedRole === 'subadmin') {
-      const staff = STAFF_ACCOUNTS.find(
-        (s) => s.email.toLowerCase() === inputEmail.toLowerCase() && s.password === inputPassword && s.role === selectedRole
-      );
-      if (staff) {
-        setCurrentUser(staff);
-        setActiveView('portal');
-        return;
-      }
-      setAuthErrorMessage(`Invalid ${selectedRole.toUpperCase()} credentials.`);
-      return;
-    }
-
-    const customer = usersDb.find(
-      (u) => u.email.toLowerCase() === inputEmail.toLowerCase() && u.password === inputPassword
+    const matched = usersDb.find(
+      (u) => u.email.toLowerCase() === inputEmail.trim().toLowerCase() && u.password === inputPassword
     );
-    if (customer) {
-      setCurrentUser(customer);
+
+    if (matched) {
+      setCurrentUser(matched);
       setActiveView('portal');
+      setInputEmail('');
+      setInputPassword('');
       return;
     }
 
-    setAuthErrorMessage('Invalid Customer Email or Password.');
+    setAuthErrorMessage('Invalid email or password. Please register if you are new.');
   };
 
-  const handleRegister = (e) => {
+  // Dedicated Staff Sign In Handler (Hidden from Customers)
+  const handleStaffSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
 
-    if (usersDb.some((u) => u.email.toLowerCase() === inputEmail.toLowerCase())) {
-      setAuthErrorMessage('An account with this email is already registered.');
+    const staffMember = STAFF_ACCOUNTS.find(
+      (s) => s.email.toLowerCase() === inputEmail.trim().toLowerCase() && s.password === inputPassword
+    );
+
+    if (staffMember) {
+      setCurrentUser(staffMember);
+      setActiveView('portal');
+      setInputEmail('');
+      setInputPassword('');
       return;
     }
 
-    const newClient = {
-      id: `CFX-${Math.floor(100 + Math.random() * 900)}`,
-      name: inputName || 'Valued Trader',
-      email: inputEmail,
+    setAuthErrorMessage('Access Denied: Unrecognized internal administrative credentials.');
+  };
+
+  // Client Registration (Clean Slate: Creates New Customer Account)
+  const handleRegisterSubmit = (e) => {
+    e.preventDefault();
+    setAuthErrorMessage('');
+
+    if (usersDb.some((u) => u.email.toLowerCase() === inputEmail.trim().toLowerCase())) {
+      setAuthErrorMessage('An account with this email already exists. Please Sign In.');
+      return;
+    }
+
+    const newCustomer = {
+      id: `CFX-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: inputName.trim(),
+      email: inputEmail.trim(),
       password: inputPassword,
       role: 'customer',
-      balance: 100000.00,
+      balance: 10000.00, // Initial balance
       allocatedInPools: 0.00,
       kycStatus: 'pending',
-      referralCode: `CFX-${Math.floor(1000 + Math.random() * 9000)}`,
+      referralCode: `CFX-${Math.floor(10000 + Math.random() * 90000)}`,
       referralEarnings: 0.00,
       trades: [],
-      ledger: []
+      ledger: [
+        { id: `INIT-${Math.floor(100 + Math.random() * 900)}`, date: new Date().toISOString().split('T')[0], type: 'Account Setup', method: 'System Credit', amount: 10000.00, status: 'Active' }
+      ]
     };
 
-    setUsersDb([newClient, ...usersDb]);
-    setCurrentUser(newClient);
+    setUsersDb([newCustomer, ...usersDb]);
+    setCurrentUser(newCustomer);
     setActiveView('portal');
+    setInputEmail('');
+    setInputPassword('');
+    setInputName('');
   };
 
+  // Customer Trade Execution
   const handleExecuteTrade = () => {
     if (!currentUser || currentUser.role !== 'customer') return;
     const reqMargin = (selectedAsset.price * tradeUnits) / tradeLeverage;
@@ -249,7 +225,7 @@ export default function App() {
     }
 
     const newTx = {
-      id: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `TX-${Math.floor(10000 + Math.random() * 90000)}`,
       symbol: selectedAsset.symbol,
       side: tradeSide,
       units: Number(tradeUnits),
@@ -272,30 +248,38 @@ export default function App() {
     const filtered = currentUser.trades.filter((t) => t.id !== tradeId);
     const updated = {
       ...currentUser,
-      balance: currentUser.balance + 35.00,
+      balance: currentUser.balance + 25.00,
       trades: filtered
     };
     setCurrentUser(updated);
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
+  // Admin Actions
   const handleAdminModifyBalance = (userId) => {
     const val = prompt('Enter new balance for client (USD):');
     if (!val || isNaN(val)) return;
-    setUsersDb((prev) => prev.map((u) => (u.id === userId ? { ...u, balance: parseFloat(val) } : u)));
+    const updatedList = usersDb.map((u) => (u.id === userId ? { ...u, balance: parseFloat(val) } : u));
+    setUsersDb(updatedList);
   };
 
   const handleAdminToggleKyc = (userId, currentKyc) => {
     const toggled = currentKyc === 'verified' ? 'pending' : 'verified';
-    setUsersDb((prev) => prev.map((u) => (u.id === userId ? { ...u, kycStatus: toggled } : u)));
+    const updatedList = usersDb.map((u) => (u.id === userId ? { ...u, kycStatus: toggled } : u));
+    setUsersDb(updatedList);
+  };
+
+  const handleAdminDeleteUser = (userId) => {
+    if (!confirm('Are you sure you want to remove this client?')) return;
+    setUsersDb(usersDb.filter((u) => u.id !== userId));
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* NAVBAR WITH ELEVATED BRAND EMBLEM */}
+      {/* GLOBAL NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
-          {/* Framed Pill Emblem (Eliminates the raw rectangle look) */}
+          {/* Brand Logo */}
           <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left group">
             <div className="h-10 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-xl flex items-center justify-center shadow-md shadow-slate-900/10 group-hover:border-amber-400 transition">
               <img
@@ -328,6 +312,7 @@ export default function App() {
             <button
               onClick={handleInstallClick}
               className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+              title="Install CommoFx app on this device"
             >
               <Download className="w-3.5 h-3.5 text-amber-600" />
               <span>Install App</span>
@@ -339,7 +324,7 @@ export default function App() {
                   onClick={() => setActiveView('portal')}
                   className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold"
                 >
-                  {currentUser.role.toUpperCase()} WORKSPACE
+                  {currentUser.role === 'customer' ? 'TRADING TERMINAL' : `${currentUser.role.toUpperCase()} PANEL`}
                 </button>
                 <button
                   onClick={() => { setCurrentUser(null); setActiveView('website'); }}
@@ -390,11 +375,9 @@ export default function App() {
       {/* 1. PUBLIC WEBSITE */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-16 pb-20">
-          {/* HERO SECTION WITH POLISHED SHIELD EMBLEM */}
           <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-10 pb-16 border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center space-y-6">
               
-              {/* Framed Glowing Card (Seamless Integration) */}
               <div className="inline-block p-2 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-400/30 shadow-2xl shadow-blue-900/15">
                 <img
                   src="/commofx-logo.png"
@@ -646,7 +629,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. SIGN IN PAGE */}
+      {/* 2. CUSTOMER SIGN IN PAGE (STRICTLY CLEAN - NO ADMIN/DEMO CLUTTER) */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -659,66 +642,8 @@ export default function App() {
                   className="h-14 w-auto mx-auto object-contain"
                 />
               </div>
-              <h2 className="text-2xl font-black text-slate-900">Portal Login</h2>
-              <p className="text-xs text-slate-500">Sign in to your designated workspace</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setSelectedRole('customer')}
-                className={`py-2 rounded-lg text-center transition ${selectedRole === 'customer' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-blue-600'}`}
-              >
-                Customer
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedRole('subadmin')}
-                className={`py-2 rounded-lg text-center transition ${selectedRole === 'subadmin' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-amber-600'}`}
-              >
-                Sub-Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedRole('admin')}
-                className={`py-2 rounded-lg text-center transition ${selectedRole === 'admin' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 hover:text-purple-600'}`}
-              >
-                Super Admin
-              </button>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] space-y-1.5">
-              <span className="font-bold text-slate-600 block">Click to Auto-fill Demo Credentials:</span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedRole('customer'); setInputEmail('rahul@client.com'); setInputPassword('password123'); }}
-                  className="bg-white border border-slate-200 px-2 py-0.5 rounded text-blue-600 font-semibold"
-                >
-                  Customer (Rahul)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedRole('customer'); setInputEmail('pooja@client.com'); setInputPassword('password123'); }}
-                  className="bg-white border border-slate-200 px-2 py-0.5 rounded text-blue-600 font-semibold"
-                >
-                  Customer (Pooja)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedRole('subadmin'); setInputEmail('subadmin@commofx.com'); setInputPassword('subadminpass'); }}
-                  className="bg-white border border-slate-200 px-2 py-0.5 rounded text-amber-600 font-semibold"
-                >
-                  Sub-Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedRole('admin'); setInputEmail('admin@commofx.com'); setInputPassword('adminpass'); }}
-                  className="bg-white border border-slate-200 px-2 py-0.5 rounded text-purple-600 font-semibold"
-                >
-                  Super Admin
-                </button>
-              </div>
+              <h2 className="text-2xl font-black text-slate-900">Client Portal Login</h2>
+              <p className="text-xs text-slate-500">Sign in to access your private trading dashboard</p>
             </div>
 
             {authErrorMessage && (
@@ -727,15 +652,13 @@ export default function App() {
               </div>
             )}
 
-            <form onSubmit={handleSignIn} className="space-y-4 text-xs">
+            <form onSubmit={handleCustomerSignIn} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-600 block mb-1 font-semibold">
-                  {selectedRole === 'customer' ? 'Customer Email Address' : `${selectedRole.toUpperCase()} Staff Email`}
-                </label>
+                <label className="text-slate-600 block mb-1 font-semibold">Registered Email Address</label>
                 <input
                   type="email"
                   required
-                  placeholder="name@commofx.com"
+                  placeholder="yourname@domain.com"
                   value={inputEmail}
                   onChange={(e) => setInputEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -756,29 +679,23 @@ export default function App() {
 
               <button
                 type="submit"
-                className={`w-full py-3 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition shadow-lg ${
-                  selectedRole === 'admin'
-                    ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'
-                    : selectedRole === 'subadmin'
-                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
-                }`}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-blue-500/20"
               >
-                Enter {selectedRole.toUpperCase()} Portal
+                Sign In to Trading Account
               </button>
             </form>
 
             <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-              New to CommoFx?{' '}
-              <button onClick={() => setActiveView('register')} className="text-blue-600 font-bold hover:underline">
-                Create a Free Account
+              New client?{' '}
+              <button onClick={() => { setActiveView('register'); setAuthErrorMessage(''); }} className="text-blue-600 font-bold hover:underline">
+                Create a Free Trading Account
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 3. REGISTER PAGE */}
+      {/* 3. CUSTOMER REGISTRATION PAGE */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -791,8 +708,8 @@ export default function App() {
                   className="h-14 w-auto mx-auto object-contain"
                 />
               </div>
-              <h2 className="text-2xl font-black text-slate-900">Create CommoFx Account</h2>
-              <p className="text-xs text-slate-500">Instant access to $100,000 simulated capital</p>
+              <h2 className="text-2xl font-black text-slate-900">Create Client Account</h2>
+              <p className="text-xs text-slate-500">Get instant access to live trading execution</p>
             </div>
 
             {authErrorMessage && (
@@ -801,13 +718,13 @@ export default function App() {
               </div>
             )}
 
-            <form onSubmit={handleRegister} className="space-y-4 text-xs">
+            <form onSubmit={handleRegisterSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="text-slate-600 block mb-1 font-semibold">Full Legal Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="John Doe"
+                  placeholder="e.g. John Doe"
                   value={inputName}
                   onChange={(e) => setInputName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -819,7 +736,7 @@ export default function App() {
                 <input
                   type="email"
                   required
-                  placeholder="name@example.com"
+                  placeholder="yourname@domain.com"
                   value={inputEmail}
                   onChange={(e) => setInputEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -842,13 +759,13 @@ export default function App() {
                 type="submit"
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-blue-500/20"
               >
-                Register & Enter Platform
+                Register & Open Terminal
               </button>
             </form>
 
             <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
               Already have an account?{' '}
-              <button onClick={() => setActiveView('signin')} className="text-blue-600 font-bold hover:underline">
+              <button onClick={() => { setActiveView('signin'); setAuthErrorMessage(''); }} className="text-blue-600 font-bold hover:underline">
                 Sign In
               </button>
             </div>
@@ -856,17 +773,78 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN */}
+      {/* 4. SEPARATE INTERNAL STAFF AUTHORIZATION GATEWAY (HIDDEN FROM CUSTOMERS) */}
+      {activeView === 'staff_auth' && (
+        <div className="flex-1 flex items-center justify-center p-4 py-16 bg-slate-900">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6 text-white">
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-3 rounded-2xl bg-slate-900 border border-slate-800 text-amber-400">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold tracking-tight">Internal Operations Gateway</h2>
+              <p className="text-xs text-slate-400">Authorized personnel & administrative access only</p>
+            </div>
+
+            {authErrorMessage && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
+                {authErrorMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleStaffSignIn} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1 font-semibold">Staff Identity Email</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@commofx.com / subadmin@commofx.com"
+                  value={inputEmail}
+                  onChange={(e) => setInputEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1 font-semibold">Security Token / Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••••••"
+                  value={inputPassword}
+                  onChange={(e) => setInputPassword(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-mono"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-amber-500/20"
+              >
+                Authenticate & Enter System
+              </button>
+            </form>
+
+            <div className="text-center pt-2">
+              <button onClick={() => setActiveView('website')} className="text-slate-500 hover:text-slate-300 text-xs">
+                ← Return to Public Website
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. WORKSPACES: CUSTOMER vs SUB-ADMIN vs SUPER ADMIN */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
+          {/* CUSTOMER ISOLATED VIEW */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">CommoFx Client Account</span>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">Private Trader Workspace</span>
                   <h2 className="text-2xl font-black text-slate-900 mt-0.5">{currentUser.name}</h2>
                   <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-1">
-                    <span>{currentUser.email}</span> • <span>ID: {currentUser.id}</span> •{' '}
+                    <span>{currentUser.email}</span> • <span>Account: {currentUser.id}</span> •{' '}
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${currentUser.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                       KYC: {currentUser.kycStatus}
                     </span>
@@ -875,11 +853,11 @@ export default function App() {
 
                 <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-xs">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Wallet Equity</span>
+                    <span className="text-slate-500 block text-[10px]">Your Available Cash</span>
                     <strong className="text-xl text-slate-900">${currentUser.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Managed PAMM</span>
+                    <span className="text-slate-500 block text-[10px]">Active Managed Equity</span>
                     <strong className="text-xl text-blue-600">${currentUser.allocatedInPools.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                   </div>
                 </div>
@@ -887,10 +865,9 @@ export default function App() {
 
               <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
                 {[
-                  { id: 'trade', label: 'Trade Execution' },
-                  { id: 'portfolio', label: `My Open Trades (${currentUser.trades ? currentUser.trades.length : 0})` },
-                  { id: 'wallet', label: 'Wallet & Ledger' },
-                  { id: 'affiliate', label: 'Referral & Partner Code' }
+                  { id: 'trade', label: 'Trading Desk' },
+                  { id: 'portfolio', label: `My Open Contracts (${currentUser.trades ? currentUser.trades.length : 0})` },
+                  { id: 'wallet', label: 'Personal Ledger & Deposits' }
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1037,13 +1014,13 @@ export default function App() {
                                   onClick={() => handleCloseTrade(t.id)}
                                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold"
                                 >
-                                  Close
+                                  Close Trade
                                 </button>
                               </td>
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
+                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Use the Trading Desk to enter a contract.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1053,7 +1030,7 @@ export default function App() {
 
               {customerTab === 'wallet' && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-base font-bold text-slate-900">Your Treasury Ledger</h3>
+                  <h3 className="text-base font-bold text-slate-900">Your Ledger History</h3>
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <table className="w-full text-left text-xs font-mono">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
@@ -1086,25 +1063,10 @@ export default function App() {
                   </div>
                 </div>
               )}
-
-              {customerTab === 'affiliate' && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-base font-bold text-slate-900">Your Referral Partner Dashboard</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <span className="text-slate-500 font-sans block mb-1">Your Unique Referral Code</span>
-                      <strong className="text-lg text-blue-600">{currentUser.referralCode}</strong>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <span className="text-slate-500 font-sans block mb-1">Total Commission Earned</span>
-                      <strong className="text-lg text-emerald-600">${currentUser.referralEarnings.toFixed(2)} USD</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
+          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY ACCESS) */}
           {currentUser.role === 'subadmin' && (
             <div className="bg-white border border-amber-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -1128,35 +1090,38 @@ export default function App() {
                       <th className="p-3.5">Customer Name</th>
                       <th className="p-3.5">Email</th>
                       <th className="p-3.5">Wallet Balance</th>
-                      <th className="p-3.5">PAMM Pool</th>
                       <th className="p-3.5">KYC</th>
                       <th className="p-3.5 text-right">Privilege</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {usersDb.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50">
-                        <td className="p-3.5 text-slate-400">{u.id}</td>
-                        <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
-                        <td className="p-3.5 text-slate-600">{u.email}</td>
-                        <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
-                        <td className="p-3.5 text-blue-600">${u.allocatedInPools.toLocaleString()}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                            {u.kycStatus}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right text-slate-400 font-sans italic text-[11px]">
-                          Locked
-                        </td>
-                      </tr>
-                    ))}
+                    {usersDb.length > 0 ? (
+                      usersDb.map((u) => (
+                        <tr key={u.id} className="hover:bg-slate-50">
+                          <td className="p-3.5 text-slate-400">{u.id}</td>
+                          <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
+                          <td className="p-3.5 text-slate-600">{u.email}</td>
+                          <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                              {u.kycStatus}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right text-slate-400 font-sans italic text-[11px]">
+                            Locked (Audit)
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">Clean Slate: No clients registered yet.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
+          {/* SUPER ADMIN: FULL CONTROL ACCESS */}
           {currentUser.role === 'admin' && (
             <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -1165,28 +1130,22 @@ export default function App() {
                     Super Admin Root Terminal
                   </span>
                   <h2 className="text-2xl font-black text-slate-900 mt-1">Master Platform Governance</h2>
-                  <p className="text-xs text-slate-500">Root administrative authority to mutate balances, clear KYC verifications, and manage users.</p>
+                  <p className="text-xs text-slate-500">Full administrative authority to manage real clients, balances, and verification.</p>
                 </div>
                 <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
                   <Shield className="w-4 h-4" /> Root Privileges Active
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-purple-50/60 border border-purple-200 rounded-2xl p-4">
                   <span className="text-[10px] text-purple-600 block uppercase font-bold">Total Clients Registered</span>
                   <span className="text-2xl font-black font-mono text-purple-950">{usersDb.length}</span>
                 </div>
                 <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4">
-                  <span className="text-[10px] text-blue-600 block uppercase font-bold">Total Client Equity</span>
+                  <span className="text-[10px] text-blue-600 block uppercase font-bold">Total Client Funds</span>
                   <span className="text-2xl font-black font-mono text-blue-950">
-                    ${usersDb.reduce((acc, u) => acc + u.balance, 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4">
-                  <span className="text-[10px] text-emerald-600 block uppercase font-bold">PAMM Managed Funds</span>
-                  <span className="text-2xl font-black font-mono text-emerald-950">
-                    ${usersDb.reduce((acc, u) => acc + u.allocatedInPools, 0).toLocaleString()}
+                    ${usersDb.reduce((acc, u) => acc + (u.balance || 0), 0).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -1194,7 +1153,7 @@ export default function App() {
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-3.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-800 flex justify-between items-center">
                   <span>Client Balance & KYC Manager</span>
-                  <span className="text-[11px] text-purple-600 font-medium">Click buttons below to edit live records</span>
+                  <span className="text-[11px] text-purple-600 font-medium">Real-time database editor</span>
                 </div>
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-white text-slate-500 border-b border-slate-200">
@@ -1203,36 +1162,46 @@ export default function App() {
                       <th className="p-3.5">Email</th>
                       <th className="p-3.5">Balance</th>
                       <th className="p-3.5">KYC</th>
-                      <th className="p-3.5 text-right">Administrative Actions</th>
+                      <th className="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {usersDb.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50">
-                        <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
-                        <td className="p-3.5 text-slate-600">{u.email}</td>
-                        <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                            {u.kycStatus}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => handleAdminModifyBalance(u.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
-                          >
-                            Edit Balance
-                          </button>
-                          <button
-                            onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
-                          >
-                            {u.kycStatus === 'verified' ? 'Revoke KYC' : 'Approve KYC'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {usersDb.length > 0 ? (
+                      usersDb.map((u) => (
+                        <tr key={u.id} className="hover:bg-slate-50">
+                          <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
+                          <td className="p-3.5 text-slate-600">{u.email}</td>
+                          <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.kycStatus === 'verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                              {u.kycStatus}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right space-x-2">
+                            <button
+                              onClick={() => handleAdminModifyBalance(u.id)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                            >
+                              Edit Balance
+                            </button>
+                            <button
+                              onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                            >
+                              {u.kycStatus === 'verified' ? 'Revoke KYC' : 'Approve KYC'}
+                            </button>
+                            <button
+                              onClick={() => handleAdminDeleteUser(u.id)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan="5" className="p-6 text-center text-slate-400 font-sans">Clean Slate: No client records registered yet.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1241,7 +1210,7 @@ export default function App() {
         </div>
       )}
 
-      {/* FOOTER */}
+      {/* FOOTER WITH DISCRETE INTERNAL STAFF ACCESS */}
       <footer className="bg-white border-t border-slate-200 mt-auto py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-3">
@@ -1258,8 +1227,18 @@ export default function App() {
               <p className="text-[11px] text-slate-400">Direct Interbank Liquidity & Commodities Fund Management</p>
             </div>
           </div>
-          <div className="text-center sm:text-right text-[10px] text-slate-400">
-            24-hour financial market infrastructure. Client-centric fund management.
+
+          {/* Discrete Staff Link (Customers cannot see role tabs during login) */}
+          <div className="flex items-center gap-4">
+            <span className="text-[10px] text-slate-400">24-hour financial market infrastructure.</span>
+            <button
+              onClick={() => { setActiveView('staff_auth'); setAuthErrorMessage(''); }}
+              className="text-slate-400 hover:text-slate-700 transition flex items-center gap-1 text-[11px]"
+              title="Staff Administration"
+            >
+              <KeyRound className="w-3 h-3 text-slate-400" />
+              <span>Staff Portal</span>
+            </button>
           </div>
         </div>
       </footer>
