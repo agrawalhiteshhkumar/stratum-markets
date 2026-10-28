@@ -8,7 +8,7 @@ import {
   Lock, Settings, UserCheck, UserX, Database, Sliders,
   LogOut, Eye, Shield, Globe, Clock, ChevronRight,
   TrendingDown, Check, ArrowRight, DollarSign, Building,
-  PieChart, HelpCircle, Compass, Target, Zap, Download, KeyRound
+  PieChart, HelpCircle, Compass, Target, Zap, Download
 } from 'lucide-react';
 
 // --- COMMOFX INSTRUMENTS ---
@@ -27,7 +27,7 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// Internal staff credentials (Never displayed to customers)
+// Hardcoded Staff Credentials (Evaluated securely behind the single login portal)
 const STAFF_ACCOUNTS = [
   {
     id: 'STAFF-SUB',
@@ -46,10 +46,9 @@ const STAFF_ACCOUNTS = [
 ];
 
 export default function App() {
-  // Navigation: 'website' | 'signin' | 'register' | 'portal' | 'staff_auth'
-  const [activeView, setActiveView] = useState('website');
+  const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
 
-  // Clean Slate Customers DB - persistent in browser localStorage
+  // Persistent Client Database (Clean Slate)
   const [usersDb, setUsersDb] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_registered_users');
@@ -65,7 +64,7 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Authentication Fields
+  // Authentication Input States
   const [inputEmail, setInputEmail] = useState('');
   const [inputPassword, setInputPassword] = useState('');
   const [inputName, setInputName] = useState('');
@@ -78,7 +77,7 @@ export default function App() {
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
-  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'portfolio' | 'wallet'
+  const [customerTab, setCustomerTab] = useState('trade');
 
   // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -140,52 +139,48 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  // Client Sign In Handler (Normal Customers)
-  const handleCustomerSignIn = (e) => {
+  // SINGLE UNIFIED LOGIN HANDLER (AUTOMATIC ROLE DETECTION)
+  const handleUnifiedSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
 
-    const matched = usersDb.find(
-      (u) => u.email.toLowerCase() === inputEmail.trim().toLowerCase() && u.password === inputPassword
-    );
+    const emailClean = inputEmail.trim().toLowerCase();
 
-    if (matched) {
-      setCurrentUser(matched);
+    // 1. Check if it's internal staff (Admin / Sub-Admin)
+    const staffMatch = STAFF_ACCOUNTS.find(
+      (s) => s.email.toLowerCase() === emailClean && s.password === inputPassword
+    );
+    if (staffMatch) {
+      setCurrentUser(staffMatch);
       setActiveView('portal');
       setInputEmail('');
       setInputPassword('');
       return;
     }
 
-    setAuthErrorMessage('Invalid email or password. Please register if you are new.');
-  };
-
-  // Dedicated Staff Sign In Handler (Hidden from Customers)
-  const handleStaffSignIn = (e) => {
-    e.preventDefault();
-    setAuthErrorMessage('');
-
-    const staffMember = STAFF_ACCOUNTS.find(
-      (s) => s.email.toLowerCase() === inputEmail.trim().toLowerCase() && s.password === inputPassword
+    // 2. Check if it's a registered customer
+    const customerMatch = usersDb.find(
+      (u) => u.email.toLowerCase() === emailClean && u.password === inputPassword
     );
-
-    if (staffMember) {
-      setCurrentUser(staffMember);
+    if (customerMatch) {
+      setCurrentUser(customerMatch);
       setActiveView('portal');
       setInputEmail('');
       setInputPassword('');
       return;
     }
 
-    setAuthErrorMessage('Access Denied: Unrecognized internal administrative credentials.');
+    setAuthErrorMessage('Invalid email or password. Please verify your credentials or register a new account.');
   };
 
-  // Client Registration (Clean Slate: Creates New Customer Account)
+  // Client Registration
   const handleRegisterSubmit = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
 
-    if (usersDb.some((u) => u.email.toLowerCase() === inputEmail.trim().toLowerCase())) {
+    const emailClean = inputEmail.trim().toLowerCase();
+
+    if (usersDb.some((u) => u.email.toLowerCase() === emailClean) || STAFF_ACCOUNTS.some((s) => s.email.toLowerCase() === emailClean)) {
       setAuthErrorMessage('An account with this email already exists. Please Sign In.');
       return;
     }
@@ -193,10 +188,10 @@ export default function App() {
     const newCustomer = {
       id: `CFX-${Math.floor(1000 + Math.random() * 9000)}`,
       name: inputName.trim(),
-      email: inputEmail.trim(),
+      email: emailClean,
       password: inputPassword,
       role: 'customer',
-      balance: 10000.00, // Initial balance
+      balance: 10000.00,
       allocatedInPools: 0.00,
       kycStatus: 'pending',
       referralCode: `CFX-${Math.floor(10000 + Math.random() * 90000)}`,
@@ -215,7 +210,7 @@ export default function App() {
     setInputName('');
   };
 
-  // Customer Trade Execution
+  // Customer Trading Actions
   const handleExecuteTrade = () => {
     if (!currentUser || currentUser.role !== 'customer') return;
     const reqMargin = (selectedAsset.price * tradeUnits) / tradeLeverage;
@@ -255,7 +250,7 @@ export default function App() {
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // Admin Actions
+  // Administrative Actions (Super Admin only)
   const handleAdminModifyBalance = (userId) => {
     const val = prompt('Enter new balance for client (USD):');
     if (!val || isNaN(val)) return;
@@ -279,7 +274,6 @@ export default function App() {
       {/* GLOBAL NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
-          {/* Brand Logo */}
           <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left group">
             <div className="h-10 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-xl flex items-center justify-center shadow-md shadow-slate-900/10 group-hover:border-amber-400 transition">
               <img
@@ -299,7 +293,6 @@ export default function App() {
             </div>
           </button>
 
-          {/* Links */}
           <nav className="hidden md:flex items-center gap-8 text-xs font-bold text-slate-600">
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">About CommoFx</button>
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">Why We Earn</button>
@@ -307,7 +300,6 @@ export default function App() {
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">How FX Works</button>
           </nav>
 
-          {/* Actions */}
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleInstallClick}
@@ -629,7 +621,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. CUSTOMER SIGN IN PAGE (STRICTLY CLEAN - NO ADMIN/DEMO CLUTTER) */}
+      {/* 2. ONE UNIFIED COMMON SIGN-IN PORTAL FOR EVERYONE */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -642,8 +634,8 @@ export default function App() {
                   className="h-14 w-auto mx-auto object-contain"
                 />
               </div>
-              <h2 className="text-2xl font-black text-slate-900">Client Portal Login</h2>
-              <p className="text-xs text-slate-500">Sign in to access your private trading dashboard</p>
+              <h2 className="text-2xl font-black text-slate-900">Sign In to CommoFx</h2>
+              <p className="text-xs text-slate-500">Enter your credentials to access your designated workspace</p>
             </div>
 
             {authErrorMessage && (
@@ -652,13 +644,13 @@ export default function App() {
               </div>
             )}
 
-            <form onSubmit={handleCustomerSignIn} className="space-y-4 text-xs">
+            <form onSubmit={handleUnifiedSignIn} className="space-y-4 text-xs">
               <div>
                 <label className="text-slate-600 block mb-1 font-semibold">Registered Email Address</label>
                 <input
                   type="email"
                   required
-                  placeholder="yourname@domain.com"
+                  placeholder="name@domain.com"
                   value={inputEmail}
                   onChange={(e) => setInputEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -666,7 +658,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Security Password</label>
+                <label className="text-slate-600 block mb-1 font-semibold">Password</label>
                 <input
                   type="password"
                   required
@@ -681,12 +673,12 @@ export default function App() {
                 type="submit"
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-blue-500/20"
               >
-                Sign In to Trading Account
+                Sign In
               </button>
             </form>
 
             <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-              New client?{' '}
+              New to CommoFx?{' '}
               <button onClick={() => { setActiveView('register'); setAuthErrorMessage(''); }} className="text-blue-600 font-bold hover:underline">
                 Create a Free Trading Account
               </button>
@@ -695,7 +687,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. CUSTOMER REGISTRATION PAGE */}
+      {/* 3. REGISTRATION PAGE */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -724,7 +716,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Johnathan Smith"
                   value={inputName}
                   onChange={(e) => setInputName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -736,7 +728,7 @@ export default function App() {
                 <input
                   type="email"
                   required
-                  placeholder="yourname@domain.com"
+                  placeholder="name@domain.com"
                   value={inputEmail}
                   onChange={(e) => setInputEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white text-xs"
@@ -773,70 +765,12 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. SEPARATE INTERNAL STAFF AUTHORIZATION GATEWAY (HIDDEN FROM CUSTOMERS) */}
-      {activeView === 'staff_auth' && (
-        <div className="flex-1 flex items-center justify-center p-4 py-16 bg-slate-900">
-          <div className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6 text-white">
-            <div className="text-center space-y-2">
-              <div className="inline-flex p-3 rounded-2xl bg-slate-900 border border-slate-800 text-amber-400">
-                <Lock className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-bold tracking-tight">Internal Operations Gateway</h2>
-              <p className="text-xs text-slate-400">Authorized personnel & administrative access only</p>
-            </div>
-
-            {authErrorMessage && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
-                {authErrorMessage}
-              </div>
-            )}
-
-            <form onSubmit={handleStaffSignIn} className="space-y-4 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">Staff Identity Email</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="admin@commofx.com / subadmin@commofx.com"
-                  value={inputEmail}
-                  onChange={(e) => setInputEmail(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">Security Token / Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••••••"
-                  value={inputPassword}
-                  onChange={(e) => setInputPassword(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-mono"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-amber-500/20"
-              >
-                Authenticate & Enter System
-              </button>
-            </form>
-
-            <div className="text-center pt-2">
-              <button onClick={() => setActiveView('website')} className="text-slate-500 hover:text-slate-300 text-xs">
-                ← Return to Public Website
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. WORKSPACES: CUSTOMER vs SUB-ADMIN vs SUPER ADMIN */}
+      {/* 4. DYNAMIC ROLE WORKSPACES (AUTOMATICALLY ROUTED) */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* CUSTOMER ISOLATED VIEW */}
+          {/* ======================================================== */}
+          {/* CUSTOMER PORTAL (ONLY THEIR OWN TRADES & WALLET)        */}
+          {/* ======================================================== */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1020,7 +954,7 @@ export default function App() {
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Use the Trading Desk to enter a contract.</td></tr>
+                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Place an order on the Trading Desk.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1066,15 +1000,17 @@ export default function App() {
             </div>
           )}
 
-          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY ACCESS) */}
+          {/* ======================================================== */}
+          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY)                        */}
+          {/* ======================================================== */}
           {currentUser.role === 'subadmin' && (
             <div className="bg-white border border-amber-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
                 <div>
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
-                    CommoFx Sub-Admin Audit Desk
+                    CommoFx Compliance & Audit Desk (Sub-Admin)
                   </span>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">Client Accounts Registry (Read-Only)</h2>
+                  <h2 className="text-2xl font-black text-slate-900 mt-1">Client Accounts Registry</h2>
                   <p className="text-xs text-slate-500">Inspection mode only. Sub-admin privileges do not authorize records modification or balance updates.</p>
                 </div>
                 <div className="bg-amber-50 text-amber-800 px-3 py-1.5 rounded-lg border border-amber-200 text-xs font-semibold flex items-center gap-1.5">
@@ -1113,7 +1049,7 @@ export default function App() {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">Clean Slate: No clients registered yet.</td></tr>
+                      <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No clients registered in the system yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1121,7 +1057,9 @@ export default function App() {
             </div>
           )}
 
-          {/* SUPER ADMIN: FULL CONTROL ACCESS */}
+          {/* ======================================================== */}
+          {/* SUPER ADMIN: ROOT GOVERNANCE (FULL EDIT PRIVILEGES)     */}
+          {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -1130,7 +1068,7 @@ export default function App() {
                     Super Admin Root Terminal
                   </span>
                   <h2 className="text-2xl font-black text-slate-900 mt-1">Master Platform Governance</h2>
-                  <p className="text-xs text-slate-500">Full administrative authority to manage real clients, balances, and verification.</p>
+                  <p className="text-xs text-slate-500">Root administrative authority to manage real clients, balances, and verification.</p>
                 </div>
                 <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
                   <Shield className="w-4 h-4" /> Root Privileges Active
@@ -1210,7 +1148,7 @@ export default function App() {
         </div>
       )}
 
-      {/* FOOTER WITH DISCRETE INTERNAL STAFF ACCESS */}
+      {/* FOOTER */}
       <footer className="bg-white border-t border-slate-200 mt-auto py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-3">
@@ -1227,18 +1165,8 @@ export default function App() {
               <p className="text-[11px] text-slate-400">Direct Interbank Liquidity & Commodities Fund Management</p>
             </div>
           </div>
-
-          {/* Discrete Staff Link (Customers cannot see role tabs during login) */}
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] text-slate-400">24-hour financial market infrastructure.</span>
-            <button
-              onClick={() => { setActiveView('staff_auth'); setAuthErrorMessage(''); }}
-              className="text-slate-400 hover:text-slate-700 transition flex items-center gap-1 text-[11px]"
-              title="Staff Administration"
-            >
-              <KeyRound className="w-3 h-3 text-slate-400" />
-              <span>Staff Portal</span>
-            </button>
+          <div className="text-center sm:text-right text-[10px] text-slate-400">
+            24-hour financial market infrastructure. Client-centric fund management.
           </div>
         </div>
       </footer>
