@@ -11,7 +11,7 @@ import {
   PieChart, HelpCircle, Compass, Target, Zap, Download
 } from 'lucide-react';
 
-// --- COMMOFX INSTRUMENTS ---
+// --- COMMOFX EXACT PORTFOLIO ASSETS ---
 const COMMOFX_ASSETS = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', category: 'Forex', price: 1.0845, change: -0.21, spread: 0.0002, decimals: 4 },
   { symbol: 'GBP/USD', name: 'British Pound / USD', category: 'Forex', price: 1.2715, change: 0.15, spread: 0.0004, decimals: 4 },
@@ -27,7 +27,7 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// Hardcoded Staff Credentials (Evaluated securely behind the single login portal)
+// Internal staff credentials (Unified Single Sign-in)
 const STAFF_ACCOUNTS = [
   {
     id: 'STAFF-SUB',
@@ -64,7 +64,7 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Authentication Input States
+  // Authentication Fields
   const [inputEmail, setInputEmail] = useState('');
   const [inputPassword, setInputPassword] = useState('');
   const [inputName, setInputName] = useState('');
@@ -72,14 +72,14 @@ export default function App() {
 
   // Market & Trading State
   const [assets, setAssets] = useState(COMMOFX_ASSETS);
-  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
+  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]); // Gold
   const [tradeUnits, setTradeUnits] = useState(1.0);
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
   const [customerTab, setCustomerTab] = useState('trade');
 
-  // PWA Prompt
+  // PWA Install Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
@@ -139,14 +139,13 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  // SINGLE UNIFIED LOGIN HANDLER (AUTOMATIC ROLE DETECTION)
+  // SINGLE UNIFIED LOGIN (AUTO ROLE DETECTION)
   const handleUnifiedSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
-
     const emailClean = inputEmail.trim().toLowerCase();
 
-    // 1. Check if it's internal staff (Admin / Sub-Admin)
+    // Check internal staff
     const staffMatch = STAFF_ACCOUNTS.find(
       (s) => s.email.toLowerCase() === emailClean && s.password === inputPassword
     );
@@ -158,7 +157,7 @@ export default function App() {
       return;
     }
 
-    // 2. Check if it's a registered customer
+    // Check client database
     const customerMatch = usersDb.find(
       (u) => u.email.toLowerCase() === emailClean && u.password === inputPassword
     );
@@ -177,7 +176,6 @@ export default function App() {
   const handleRegisterSubmit = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
-
     const emailClean = inputEmail.trim().toLowerCase();
 
     if (usersDb.some((u) => u.email.toLowerCase() === emailClean) || STAFF_ACCOUNTS.some((s) => s.email.toLowerCase() === emailClean)) {
@@ -250,64 +248,55 @@ export default function App() {
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // Administrative Actions (Super Admin only)
+  // Administrative Actions
   const handleAdminModifyBalance = (userId) => {
     const val = prompt('Enter new balance for client (USD):');
     if (!val || isNaN(val)) return;
-    const updatedList = usersDb.map((u) => (u.id === userId ? { ...u, balance: parseFloat(val) } : u));
-    setUsersDb(updatedList);
+    setUsersDb(usersDb.map((u) => (u.id === userId ? { ...u, balance: parseFloat(val) } : u)));
   };
 
   const handleAdminToggleKyc = (userId, currentKyc) => {
     const toggled = currentKyc === 'verified' ? 'pending' : 'verified';
-    const updatedList = usersDb.map((u) => (u.id === userId ? { ...u, kycStatus: toggled } : u));
-    setUsersDb(updatedList);
+    setUsersDb(usersDb.map((u) => (u.id === userId ? { ...u, kycStatus: toggled } : u)));
   };
 
   const handleAdminDeleteUser = (userId) => {
-    if (!confirm('Are you sure you want to remove this client?')) return;
+    if (!confirm('Are you sure you want to delete this client?')) return;
     setUsersDb(usersDb.filter((u) => u.id !== userId));
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* GLOBAL NAVBAR */}
+      {/* NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
-          <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left group">
-            <div className="h-10 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-xl flex items-center justify-center shadow-md shadow-slate-900/10 group-hover:border-amber-400 transition">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
+          <button onClick={() => setActiveView('website')} className="flex items-center gap-2.5 text-left group">
+            <div className="h-9 w-9 rounded-xl bg-slate-900 border border-amber-400/40 flex items-center justify-center p-1 shadow-sm">
               <img
                 src="/commofx-logo.png"
                 alt="COMMOFX"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                className="h-7 w-auto object-contain"
+                className="h-full w-full object-contain"
               />
             </div>
             <div>
-              <span className="font-black text-lg tracking-tight text-blue-950 block leading-none">
+              <span className="font-black text-base tracking-tight text-blue-950 block leading-none">
                 COMMOFX
               </span>
               <span className="text-[9px] text-blue-600 font-bold uppercase tracking-widest block mt-0.5">
-                CLIENT-FIRST FINANCIAL SOLUTIONS
+                GLOBAL MARKETS
               </span>
             </div>
           </button>
 
-          <nav className="hidden md:flex items-center gap-8 text-xs font-bold text-slate-600">
-            <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">About CommoFx</button>
-            <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">Why We Earn</button>
-            <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">Currencies & Metals</button>
-            <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">How FX Works</button>
-          </nav>
-
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handleInstallClick}
-              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+              className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
               title="Install CommoFx app on this device"
             >
               <Download className="w-3.5 h-3.5 text-amber-600" />
-              <span>Install App</span>
+              <span className="hidden sm:inline">Install App</span>
             </button>
 
             {currentUser ? (
@@ -316,7 +305,7 @@ export default function App() {
                   onClick={() => setActiveView('portal')}
                   className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold"
                 >
-                  {currentUser.role === 'customer' ? 'TRADING TERMINAL' : `${currentUser.role.toUpperCase()} PANEL`}
+                  {currentUser.role === 'customer' ? 'TRADING DESK' : `${currentUser.role.toUpperCase()} PANEL`}
                 </button>
                 <button
                   onClick={() => { setCurrentUser(null); setActiveView('website'); }}
@@ -336,7 +325,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => { setActiveView('register'); setAuthErrorMessage(''); }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-sm shadow-blue-500/20"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm"
                 >
                   Register
                 </button>
@@ -347,9 +336,9 @@ export default function App() {
 
         {/* Live Market Price Tape */}
         <div className="bg-slate-900 text-white py-1 px-4 overflow-x-auto text-[11px] font-mono border-t border-slate-800">
-          <div className="max-w-7xl mx-auto flex items-center gap-7 whitespace-nowrap">
+          <div className="max-w-6xl mx-auto flex items-center gap-7 whitespace-nowrap">
             <span className="text-blue-400 font-sans font-bold text-[10px] uppercase flex items-center gap-1">
-              <Activity className="w-3 h-3 text-emerald-400" /> CommoFx Feed:
+              <Activity className="w-3 h-3 text-emerald-400" /> CommoFx Live:
             </span>
             {assets.slice(0, 8).map((item) => (
               <span key={item.symbol} className="flex items-center gap-1.5">
@@ -364,44 +353,39 @@ export default function App() {
         </div>
       </header>
 
-      {/* 1. PUBLIC WEBSITE */}
+      {/* ======================================================== */}
+      {/* 1. SIMPLE, ELEGANT LANDING PAGE                          */}
+      {/* ======================================================== */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-16 pb-20">
-          <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-10 pb-16 border-b border-slate-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center space-y-6">
+          {/* HERO BANNER */}
+          <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-14 pb-14 border-b border-slate-200">
+            <div className="max-w-4xl mx-auto px-4 text-center space-y-6">
               
-              <div className="inline-block p-2 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-400/30 shadow-2xl shadow-blue-900/15">
-                <img
-                  src="/commofx-logo.png"
-                  alt="COMMOFX"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  className="h-28 sm:h-36 w-auto object-contain rounded-2xl"
-                />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/80 border border-blue-200 text-blue-800 text-[11px] font-bold tracking-wide uppercase">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                COMMOFX • Client-First Financial Solutions
               </div>
 
-              <div>
-                <span className="bg-blue-100 text-blue-800 border border-blue-200 text-xs px-3.5 py-1 rounded-full font-bold uppercase tracking-wider inline-block">
-                  COMMOFX • CLIENT-FIRST FINANCIAL SOLUTIONS
-                </span>
-              </div>
-
-              <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight leading-tight max-w-4xl mx-auto">
+              <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Transforming the Global <br />
                 <span className="text-blue-600">Forex & Commodities Landscape</span>
               </h1>
-              <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-                Empowering individuals and institutions with high-liquidity currency pairs, gold, crude oil, and transparent margin execution.
+
+              <p className="text-sm sm:text-base text-slate-600 max-w-xl mx-auto leading-relaxed">
+                Direct interbank access to G7 currencies, physical gold, silver, crude oil, and major equity indices with zero hidden costs.
               </p>
+
               <div className="flex flex-wrap justify-center gap-3 pt-2">
                 <button
                   onClick={() => setActiveView('register')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition shadow-lg shadow-blue-500/25 flex items-center gap-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-xs sm:text-sm transition shadow-lg shadow-blue-500/20 flex items-center gap-2"
                 >
                   Open Client Account <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setActiveView('signin')}
-                  className="bg-white hover:bg-slate-50 text-slate-700 font-bold px-6 py-3 rounded-xl text-sm border border-slate-300 transition shadow-sm"
+                  className="bg-white hover:bg-slate-50 text-slate-700 font-bold px-6 py-3 rounded-xl text-xs sm:text-sm border border-slate-300 transition shadow-sm"
                 >
                   Access Trading Portal
                 </button>
@@ -409,233 +393,117 @@ export default function App() {
             </div>
           </section>
 
-          {/* WHY WE EARN & WHAT WE DO */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm space-y-6">
-                <div>
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Financial Purpose</span>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">Why We Earn?</h2>
-                  <p className="text-xs text-slate-500 mt-1">The fundamental drivers behind modern wealth building.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { title: 'Better Future', desc: 'Long-term security and multi-generational family stability.' },
-                    { title: 'Financial Freedom', desc: 'Independence from single-income debt cycles.' },
-                    { title: 'Basic Needs', desc: 'Secure housing, education, and essential living comfort.' },
-                    { title: 'Lifestyle & Travel', desc: 'Enjoying life, world holiday travel, and personal experiences.' },
-                    { title: 'Health & Wellness', desc: 'High-standard healthcare and physical peace of mind.' },
-                    { title: 'Capital Growth', desc: 'Strategic capital compounding across global assets.' }
-                  ].map((item, idx) => (
-                    <div key={idx} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1">
-                      <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {item.title}
-                      </div>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">{item.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {/* SIMPLIFIED 4-STEP LIFECYCLE (WHAT WE DO) */}
+          <section className="max-w-5xl mx-auto px-4 sm:px-6">
+            <div className="text-center space-y-1 mb-8">
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Financial Discipline</span>
+              <h2 className="text-2xl font-black text-slate-900">How CommoFx Powers Your Capital</h2>
+            </div>
 
-              <div className="bg-gradient-to-br from-blue-900 to-blue-950 text-white rounded-3xl p-8 shadow-xl flex flex-col justify-between space-y-6">
-                <div>
-                  <span className="text-xs font-bold text-blue-300 uppercase tracking-widest">Our Strategic Lifecycle</span>
-                  <h2 className="text-2xl font-black mt-1">WHAT WE DO?</h2>
-                  <p className="text-xs text-blue-200 mt-1">A structured four-step journey to convert income into sustainable market equity.</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { step: '01', title: 'WE SPEND', desc: 'Prudent cash flow budgeting.' },
+                { step: '02', title: 'WE SAVE', desc: 'Systematic liquidity reserves.' },
+                { step: '03', title: 'WE UTILIZE', desc: 'Deploy capital into tools.' },
+                { step: '04', title: 'WE INVEST', desc: 'High-conviction Forex & Metals.' }
+              ].map((s) => (
+                <div key={s.step} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm text-center space-y-1 hover:border-blue-400 transition">
+                  <span className="text-xs font-black font-mono text-blue-600">{s.step}</span>
+                  <h3 className="font-bold text-slate-900 text-sm">{s.title}</h3>
+                  <p className="text-[11px] text-slate-500">{s.desc}</p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { step: '01', title: 'WE SPEND', desc: 'Prudent budgeting and essential cash flow control.' },
-                    { step: '02', title: 'WE SAVE', desc: 'Systematic liquidity reserves for emergency readiness.' },
-                    { step: '03', title: 'WE UTILIZE', desc: 'Capital deployment into productive tools and infrastructure.' },
-                    { step: '04', title: 'WE INVEST', desc: 'Strategic high-conviction allocations in Forex and Commodities.' }
-                  ].map((s, idx) => (
-                    <div key={idx} className="bg-white/10 border border-white/10 p-4 rounded-2xl space-y-1 backdrop-blur-sm">
-                      <span className="text-blue-300 text-xs font-black font-mono">{s.step}</span>
-                      <h3 className="font-bold text-sm tracking-wide">{s.title}</h3>
-                      <p className="text-[11px] text-blue-100 leading-relaxed">{s.desc}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-[11px] text-blue-200 border-t border-white/10 pt-3 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  CommoFx delivers client-first fund management with institutional risk parameters.
-                </div>
-              </div>
+              ))}
             </div>
           </section>
 
-          {/* ABOUT COMMOFX */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              <div className="lg:col-span-8 space-y-4">
-                <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Corporate Profile</span>
-                <h2 className="text-3xl font-extrabold text-slate-900">About COMMOFX</h2>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  At <strong>COMMOFX</strong>, we are committed to transforming the investment landscape with our client-first approach and innovative financial solutions. Our team of experienced professionals leverages cutting-edge technology and in-depth market insights to maximize returns and drive sustainable growth.
-                </p>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  We prioritize integrity, transparency, and excellence in every aspect of our operations, ensuring that our clients' financial goals are met and exceeded. Join us at CommoFx, where your financial future is our mission.
-                </p>
-              </div>
-              <div className="lg:col-span-4 bg-blue-50 rounded-2xl p-6 border border-blue-200 text-center space-y-3">
-                <div className="text-5xl">🐂</div>
-                <h3 className="font-bold text-slate-900 text-sm">Institutional Liquidity</h3>
-                <p className="text-xs text-slate-500">
-                  Continuous multi-asset market making across Forex majors and physical commodities.
-                </p>
-              </div>
+          {/* SIMPLIFIED ASSET CHIPS */}
+          <section className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6">
+            <div className="text-center space-y-1">
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Market Coverage</span>
+              <h2 className="text-2xl font-black text-slate-900">Invest In Leading Global Assets</h2>
             </div>
-          </section>
 
-          {/* VISION & MISSION */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider">
-                  <Compass className="w-4 h-4" /> Strategic Horizon
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Currencies */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <h3 className="font-bold text-slate-900 text-xs">Currencies (Forex)</h3>
+                  <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">7 Majors</span>
                 </div>
-                <h3 className="text-2xl font-black text-slate-900">Our Vision</h3>
-                <div className="space-y-3 pt-2">
-                  {[
-                    'To be the most trusted and preferred fund management platform worldwide.',
-                    'Delivering unparalleled service and tailored solutions to meet our clients\' unique financial goals.',
-                    'Upholding the highest standards of ethics and accountability in all our financial operations.'
-                  ].map((v, i) => (
-                    <div key={i} className="flex items-start gap-3 text-xs text-slate-600">
-                      <span className="h-5 w-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-[10px]">
-                        {i + 1}
-                      </span>
-                      <p className="leading-relaxed">{v}</p>
-                    </div>
+                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+                  {['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'].map((c) => (
+                    <span key={c} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
+                      {c}
+                    </span>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider">
-                  <Target className="w-4 h-4" /> Operational Mandate
+              {/* Commodities */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <h3 className="font-bold text-slate-900 text-xs">Commodities</h3>
+                  <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded">Metals & Energy</span>
                 </div>
-                <h3 className="text-2xl font-black text-slate-900">Our Mission</h3>
-                <div className="space-y-3 pt-2">
-                  {[
-                    'Strategically manage investments to achieve optimal financial performance for our clients.',
-                    'Continuously enhance our services through cutting-edge technology and market insights.',
-                    'Foster trust and loyalty by prioritizing client needs and delivering consistent results.'
-                  ].map((m, i) => (
-                    <div key={i} className="flex items-start gap-3 text-xs text-slate-600">
-                      <span className="h-5 w-5 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center shrink-0 text-[10px]">
-                        {i + 1}
-                      </span>
-                      <p className="leading-relaxed">{m}</p>
-                    </div>
+                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+                  {['Spot Gold (XAU)', 'Silver (XAG)', 'Crude Oil (WTI)', 'Natural Gas'].map((cm) => (
+                    <span key={cm} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
+                      {cm}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Indices */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <h3 className="font-bold text-slate-900 text-xs">Major Indices</h3>
+                  <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded">Equities</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+                  {['Dow Jones 30', 'Nasdaq 100'].map((ind) => (
+                    <span key={ind} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
+                      {ind}
+                    </span>
                   ))}
                 </div>
               </div>
             </div>
           </section>
 
-          {/* COMMODITIES & CURRENCIES */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8">
-            <div className="text-center space-y-2">
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">CommoFx Instrument Registry</span>
-              <h2 className="text-3xl font-extrabold text-slate-900">Assets Invested Through COMMOFX</h2>
-              <p className="text-xs text-slate-500 max-w-xl mx-auto">
-                Direct portfolio exposure into G7 currencies, physical precious metals, energy futures, and benchmarks.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-sm">Currencies (Forex)</h3>
-                  <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded">7 Majors</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2 text-xs font-mono">
-                  {[
-                    { code: 'EUR', name: 'European Euro' },
-                    { code: 'USD', name: 'United States Dollar' },
-                    { code: 'CAD', name: 'Canadian Dollar' },
-                    { code: 'AUD', name: 'Australian Dollar' },
-                    { code: 'JPY', name: 'Japanese Yen' },
-                    { code: 'CHF', name: 'Swiss Franc' },
-                    { code: 'GBP', name: 'Great British Pound' }
-                  ].map((c) => (
-                    <div key={c.code} className="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-                      <span className="font-bold text-slate-900">{c.code}</span>
-                      <span className="text-slate-500 text-[11px] font-sans">{c.name}</span>
-                    </div>
-                  ))}
-                </div>
+          {/* 4 CORE TRUST BADGES */}
+          <section className="max-w-5xl mx-auto px-4 sm:px-6">
+            <div className="bg-slate-900 text-white rounded-3xl p-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+              <div>
+                <span className="text-xl font-black text-blue-400 block">24 Hours</span>
+                <span className="text-xs text-slate-300">Continuous Market Liquidity</span>
               </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-sm">Commodities</h3>
-                  <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded">Metals & Energy</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2 text-xs font-mono">
-                  {[
-                    { symbol: 'XAUUSD', name: 'Spot Gold' },
-                    { symbol: 'XAGUSD', name: 'Spot Silver' },
-                    { symbol: 'USOUSD', name: 'Crude Oil (WTI)' },
-                    { symbol: 'NG', name: 'Natural Gas Futures' }
-                  ].map((cm) => (
-                    <div key={cm.symbol} className="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-                      <span className="font-bold text-slate-900">{cm.symbol}</span>
-                      <span className="text-slate-500 text-[11px] font-sans">{cm.name}</span>
-                    </div>
-                  ))}
-                </div>
+              <div>
+                <span className="text-xl font-black text-blue-400 block">Zero</span>
+                <span className="text-xs text-slate-300">No Forced Liquidation</span>
               </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-sm">Indices & Features</h3>
-                  <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded">Wall Street</span>
-                </div>
-                <div className="space-y-2 text-xs font-mono">
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex justify-between">
-                    <strong className="text-slate-900">US 30</strong>
-                    <span className="text-slate-500 font-sans">Dow Jones Industrial</span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex justify-between">
-                    <strong className="text-slate-900">US 100</strong>
-                    <span className="text-slate-500 font-sans">Nasdaq Tech Index</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 space-y-2 text-[11px] text-slate-600">
-                  <strong className="text-slate-800 block">Key Trading Features:</strong>
-                  <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-blue-600" /> 24 Hours Active Market</div>
-                  <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-blue-600" /> No Forced Liquidation</div>
-                  <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-blue-600" /> On-Time Account Withdrawals</div>
-                  <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-blue-600" /> Macro Economic Events Driven</div>
-                </div>
+              <div>
+                <span className="text-xl font-black text-emerald-400 block">On-Time</span>
+                <span className="text-xs text-slate-300">Reliable Client Withdrawals</span>
+              </div>
+              <div>
+                <span className="text-xl font-black text-amber-400 block">Client First</span>
+                <span className="text-xs text-slate-300">Audited Fund Governance</span>
               </div>
             </div>
           </section>
         </div>
       )}
 
-      {/* 2. ONE UNIFIED COMMON SIGN-IN PORTAL FOR EVERYONE */}
+      {/* ======================================================== */}
+      {/* 2. SINGLE UNIFIED SIGN-IN PAGE                           */}
+      {/* ======================================================== */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
-            <div className="text-center space-y-2">
-              <div className="inline-block p-1.5 rounded-2xl bg-slate-950 border border-amber-400/30">
-                <img
-                  src="/commofx-logo.png"
-                  alt="CommoFx"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  className="h-14 w-auto mx-auto object-contain"
-                />
-              </div>
-              <h2 className="text-2xl font-black text-slate-900">Sign In to CommoFx</h2>
-              <p className="text-xs text-slate-500">Enter your credentials to access your designated workspace</p>
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-black text-slate-900">Sign In</h2>
+              <p className="text-xs text-slate-500">Enter your email and password to continue</p>
             </div>
 
             {authErrorMessage && (
@@ -646,7 +514,7 @@ export default function App() {
 
             <form onSubmit={handleUnifiedSignIn} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Registered Email Address</label>
+                <label className="text-slate-600 block mb-1 font-semibold">Email Address</label>
                 <input
                   type="email"
                   required
@@ -678,30 +546,24 @@ export default function App() {
             </form>
 
             <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-              New to CommoFx?{' '}
+              New client?{' '}
               <button onClick={() => { setActiveView('register'); setAuthErrorMessage(''); }} className="text-blue-600 font-bold hover:underline">
-                Create a Free Trading Account
+                Create an Account
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 3. REGISTRATION PAGE */}
+      {/* ======================================================== */}
+      {/* 3. CLIENT REGISTRATION PAGE                              */}
+      {/* ======================================================== */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
-            <div className="text-center space-y-2">
-              <div className="inline-block p-1.5 rounded-2xl bg-slate-950 border border-amber-400/30">
-                <img
-                  src="/commofx-logo.png"
-                  alt="CommoFx"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  className="h-14 w-auto mx-auto object-contain"
-                />
-              </div>
+            <div className="text-center space-y-1">
               <h2 className="text-2xl font-black text-slate-900">Create Client Account</h2>
-              <p className="text-xs text-slate-500">Get instant access to live trading execution</p>
+              <p className="text-xs text-slate-500">Access live execution across currencies & metals</p>
             </div>
 
             {authErrorMessage && (
@@ -736,7 +598,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-slate-600 block mb-1 font-semibold">Choose Password</label>
+                <label className="text-slate-600 block mb-1 font-semibold">Password</label>
                 <input
                   type="password"
                   required
@@ -765,12 +627,12 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. DYNAMIC ROLE WORKSPACES (AUTOMATICALLY ROUTED) */}
+      {/* ======================================================== */}
+      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN                */}
+      {/* ======================================================== */}
       {activeView === 'portal' && currentUser && (
-        <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* ======================================================== */}
-          {/* CUSTOMER PORTAL (ONLY THEIR OWN TRADES & WALLET)        */}
-          {/* ======================================================== */}
+        <div className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
+          {/* CUSTOMER WORKSPACE */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -801,7 +663,7 @@ export default function App() {
                 {[
                   { id: 'trade', label: 'Trading Desk' },
                   { id: 'portfolio', label: `My Open Contracts (${currentUser.trades ? currentUser.trades.length : 0})` },
-                  { id: 'wallet', label: 'Personal Ledger & Deposits' }
+                  { id: 'wallet', label: 'Personal Ledger' }
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1000,9 +862,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY)                        */}
-          {/* ======================================================== */}
+          {/* SUB-ADMIN: AUDIT ONLY (READ ONLY) */}
           {currentUser.role === 'subadmin' && (
             <div className="bg-white border border-amber-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -1057,9 +917,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* SUPER ADMIN: ROOT GOVERNANCE (FULL EDIT PRIVILEGES)     */}
-          {/* ======================================================== */}
+          {/* SUPER ADMIN: FULL CONTROL */}
           {currentUser.role === 'admin' && (
             <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
               <div className="flex justify-between items-start border-b border-slate-200 pb-4">
@@ -1068,7 +926,7 @@ export default function App() {
                     Super Admin Root Terminal
                   </span>
                   <h2 className="text-2xl font-black text-slate-900 mt-1">Master Platform Governance</h2>
-                  <p className="text-xs text-slate-500">Root administrative authority to manage real clients, balances, and verification.</p>
+                  <p className="text-xs text-slate-500">Full administrative authority to manage real clients, balances, and verification.</p>
                 </div>
                 <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
                   <Shield className="w-4 h-4" /> Root Privileges Active
@@ -1138,7 +996,7 @@ export default function App() {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="5" className="p-6 text-center text-slate-400 font-sans">Clean Slate: No client records registered yet.</td></tr>
+                      <tr><td colSpan="5" className="p-6 text-center text-slate-400 font-sans">No client records registered yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1149,24 +1007,13 @@ export default function App() {
       )}
 
       {/* FOOTER */}
-      <footer className="bg-white border-t border-slate-200 mt-auto py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-3">
-            <div className="h-8 px-2 py-1 bg-slate-900 border border-amber-400/40 rounded-lg flex items-center justify-center">
-              <img
-                src="/commofx-logo.png"
-                alt="COMMOFX"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                className="h-5 w-auto object-contain"
-              />
-            </div>
-            <div>
-              <strong className="text-slate-800 font-bold">COMMOFX</strong> — COMMO FOREX
-              <p className="text-[11px] text-slate-400">Direct Interbank Liquidity & Commodities Fund Management</p>
-            </div>
+      <footer className="bg-white border-t border-slate-200 mt-auto py-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <strong className="text-slate-800 font-bold">COMMOFX</strong> — COMMO FOREX
           </div>
-          <div className="text-center sm:text-right text-[10px] text-slate-400">
-            24-hour financial market infrastructure. Client-centric fund management.
+          <div className="text-center sm:text-right text-[11px] text-slate-400">
+            24-Hour Interbank Liquidity & Commodities Infrastructure
           </div>
         </div>
       </footer>
