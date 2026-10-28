@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, Activity, ShieldAlert, BarChart2,
-  Layers, Search, CheckCircle2, Smartphone, Monitor,
+  Layers, Search, CheckCircle2,
   Send, Bot, User, LogIn, FileCheck, ShieldCheck, X,
   Wallet, ArrowDownToLine, ArrowUpFromLine, Users, Gift,
   BookOpen, Sparkles, Award, ExternalLink, RefreshCw,
@@ -14,19 +14,16 @@ import { GoogleGenAI } from '@google/genai';
 
 // --- COMMOFX EXACT PORTFOLIO ASSETS ---
 const COMMOFX_ASSETS = [
-  // Currencies (EUR, USD, CAD, AUD, JPY, CHF, GBP)
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', category: 'Forex', price: 1.0845, change: -0.21, spread: 0.0002, decimals: 4 },
   { symbol: 'GBP/USD', name: 'British Pound / USD', category: 'Forex', price: 1.2715, change: 0.15, spread: 0.0004, decimals: 4 },
   { symbol: 'USD/JPY', name: 'US Dollar / Japanese Yen', category: 'Forex', price: 154.20, change: 0.42, spread: 0.02, decimals: 2 },
   { symbol: 'AUD/USD', name: 'Australian Dollar / USD', category: 'Forex', price: 0.6540, change: -0.18, spread: 0.0003, decimals: 4 },
   { symbol: 'USD/CAD', name: 'US Dollar / Canadian Dollar', category: 'Forex', price: 1.3780, change: 0.12, spread: 0.0003, decimals: 4 },
   { symbol: 'USD/CHF', name: 'US Dollar / Swiss Franc', category: 'Forex', price: 0.8920, change: -0.05, spread: 0.0003, decimals: 4 },
-  // Commodities (XAUUSD, XAGUSD, USOUSD, NG)
   { symbol: 'XAU/USD', name: 'Spot Gold / US Dollar', category: 'Commodities', price: 2342.80, change: 0.84, spread: 0.40, decimals: 2 },
   { symbol: 'XAG/USD', name: 'Spot Silver / US Dollar', category: 'Commodities', price: 29.40, change: 1.45, spread: 0.02, decimals: 2 },
   { symbol: 'USO/USD', name: 'WTI Crude Oil', category: 'Commodities', price: 81.20, change: 1.15, spread: 0.04, decimals: 2 },
   { symbol: 'NG/USD', name: 'Natural Gas Futures', category: 'Commodities', price: 2.74, change: -1.20, spread: 0.01, decimals: 2 },
-  // Indices (US30 - Dow Jones, US100 - Nasdaq)
   { symbol: 'US30', name: 'Dow Jones Industrial 30', category: 'Indices', price: 39120.00, change: 0.32, spread: 2.0, decimals: 2 },
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
@@ -91,7 +88,6 @@ const INITIAL_USERS_DB = [
   }
 ];
 
-// Sub-admin & Super Admin Staff Credentials
 const STAFF_ACCOUNTS = [
   {
     id: 'STAFF-AUDIT',
@@ -110,8 +106,7 @@ const STAFF_ACCOUNTS = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('website');
-  const [deviceEmulator, setDeviceEmulator] = useState('desktop');
+  const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
   const [usersDb, setUsersDb] = useState(INITIAL_USERS_DB);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -277,7 +272,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* NAVBAR */}
+      {/* GLOBAL NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <button onClick={() => setActiveView('website')} className="flex items-center gap-3 text-left">
@@ -290,7 +285,7 @@ export default function App() {
             </div>
           </button>
 
-          <nav className="hidden lg:flex items-center gap-8 text-xs font-bold text-slate-600">
+          <nav className="hidden md:flex items-center gap-8 text-xs font-bold text-slate-600">
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">About CommoFx</button>
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">Why We Earn</button>
             <button onClick={() => setActiveView('website')} className="hover:text-blue-600 transition">Currencies & Metals</button>
@@ -298,21 +293,6 @@ export default function App() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-              <button
-                onClick={() => setDeviceEmulator('desktop')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded font-semibold transition ${deviceEmulator === 'desktop' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-blue-600'}`}
-              >
-                <Monitor className="w-3.5 h-3.5" /> Desktop
-              </button>
-              <button
-                onClick={() => setDeviceEmulator('mobile')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded font-semibold transition ${deviceEmulator === 'mobile' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-blue-600'}`}
-              >
-                <Smartphone className="w-3.5 h-3.5" /> Mobile App
-              </button>
-            </div>
-
             {currentUser ? (
               <div className="flex items-center gap-2">
                 <button
@@ -325,8 +305,8 @@ export default function App() {
                       : 'bg-blue-50 text-blue-700 border-blue-200'
                   }`}
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  {currentUser.role.toUpperCase()}
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {currentUser.role.toUpperCase()} WORKSPACE
                 </button>
                 <button
                   onClick={() => { setCurrentUser(null); setActiveView('website'); }}
@@ -374,9 +354,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ======================================================== */}
-      {/* 1. PUBLIC LANDING PAGE (COMMOFX DECK SECTIONS)           */}
-      {/* ======================================================== */}
+      {/* 1. PUBLIC LANDING PAGE */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-20 pb-20">
           <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-16 pb-20 border-b border-slate-200">
@@ -537,7 +515,7 @@ export default function App() {
             </div>
           </section>
 
-          {/* INSTRUMENTS REGISTRY */}
+          {/* COMMODITIES & CURRENCIES */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8">
             <div className="text-center space-y-2">
               <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">CommoFx Instrument Registry</span>
@@ -620,9 +598,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 2. SIGN IN PAGE                                          */}
-      {/* ======================================================== */}
+      {/* 2. SIGN IN PAGE */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -749,9 +725,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 3. REGISTER PAGE                                         */}
-      {/* ======================================================== */}
+      {/* 3. REGISTER PAGE */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -824,12 +798,9 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN                */}
-      {/* ======================================================== */}
+      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* CUSTOMER PORTAL */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1014,7 +985,7 @@ export default function App() {
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
+                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades. Use Trade Execution to place orders.</td></tr>
                         )}
                       </tbody>
                     </table>
