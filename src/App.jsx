@@ -150,7 +150,7 @@ export default function App() {
   const [regFileName, setRegFileName] = useState('');
 
   const [depositInr, setDepositInr] = useState('90000');
-  const [paymentGateway, setPaymentGateway] = useState('UPI / Instant Transfer (BHIM, GPay, PhonePe)');
+  const [paymentGateway, setPaymentGateway] = useState('Direct Bank Transfer (IMPS / NEFT / RTGS)');
   const [txRefNumber, setTxRefNumber] = useState('');
   const [depositNotice, setDepositNotice] = useState('');
 
@@ -1706,7 +1706,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 3: DEPOSIT */}
+              {/* TAB 3: DEPOSIT (STRICT DETAILS APPLIED) */}
               {customerTab === 'deposit' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
@@ -1726,14 +1726,14 @@ export default function App() {
 
                     <form onSubmit={handleDepositSubmit} className="space-y-4 text-xs">
                       <div>
-                        <label className="text-slate-600 block mb-1 font-semibold">Select Payment Gateway</label>
+                        <label className="text-slate-600 block mb-1 font-semibold">Payment Transfer Method</label>
                         <select
                           value={paymentGateway}
                           onChange={(e) => setPaymentGateway(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-blue-600 font-semibold text-xs"
                         >
+                          <option value="Direct Bank Transfer (IMPS / NEFT / RTGS)">Direct Bank Transfer (IMPS / NEFT / RTGS)</option>
                           <option value="UPI / Instant Transfer (BHIM, GPay, PhonePe)">UPI / Instant Transfer (BHIM, GPay, PhonePe)</option>
-                          <option value="National Bank Wire / IMPS / NEFT">National Bank Wire / IMPS / NEFT</option>
                           <option value="Crypto USDT (TRC-20)">Crypto Deposit — USDT (TRC-20 Network)</option>
                         </select>
                       </div>
@@ -1771,12 +1771,12 @@ export default function App() {
 
                       <div>
                         <label className="text-slate-600 block mb-1 font-semibold">
-                          Payment Reference / UTR Number / UPI Ref ID
+                          Payment Reference / UTR Number / Transaction ID
                         </label>
                         <input
                           type="text"
                           required
-                          placeholder="e.g. UPI Ref 3829104829 / UTR Number"
+                          placeholder="e.g. UTR / IMPS Ref Number"
                           value={txRefNumber}
                           onChange={(e) => setTxRefNumber(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 font-mono text-xs uppercase"
@@ -1792,23 +1792,38 @@ export default function App() {
                     </form>
                   </div>
 
+                  {/* OFFICIAL ACCOUNT DETAILS CARD */}
                   <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">Gateway Information</span>
-                      <h4 className="text-lg font-black mt-1">Official Deposit Channels</h4>
+                      <h4 className="text-lg font-black mt-1">Official Company Deposit Account</h4>
                       
                       <div className="space-y-3 mt-4 text-xs font-mono">
-                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                          <span className="text-[10px] text-slate-400 font-sans block">UPI VPA Handle</span>
-                          <strong className="text-amber-400 text-sm">commofx@institutional</strong>
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1">
+                          <span className="text-[10px] text-amber-400 font-sans font-bold block uppercase tracking-wider">
+                            Beneficiary Account Name
+                          </span>
+                          <strong className="text-white text-sm block">COMMOFX DIGITALS</strong>
                         </div>
-                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                          <span className="text-[10px] text-slate-400 font-sans block">Bank Account (IMPS / NEFT)</span>
-                          <span className="text-slate-200 block">Bank: HDFC Bank Ltd</span>
-                          <span className="text-slate-200 block">A/C: 50200083920194</span>
-                          <span className="text-slate-200 block">IFSC: HDFC0000240</span>
+
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1">
+                          <span className="text-[10px] text-slate-400 font-sans block">Account Number</span>
+                          <strong className="text-amber-400 text-base tracking-wider block">
+                            2502263066868847
+                          </strong>
+                        </div>
+
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1">
+                          <span className="text-[10px] text-slate-400 font-sans block">IFSC Code</span>
+                          <strong className="text-emerald-400 text-sm tracking-wide block">
+                            AUBL0002630
+                          </strong>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 border-t border-white/10 pt-3">
+                      Transfer in INR via IMPS, NEFT, or RTGS to the account details above. Submit your UTR/Reference ID to have your USD wallet credited upon Super Admin verification.
                     </div>
                   </div>
                 </div>
@@ -1969,7 +1984,7 @@ export default function App() {
                                 <tr key={h.id} className="hover:bg-slate-50">
                                   <td className="p-3 text-slate-400">{h.id}</td>
                                   <td className="p-3 font-bold text-slate-900 font-sans">{h.poolName}</td>
-                                  <td className="p-3 font-semibold text-slate-800">${h.investedAmount.toFixed(2)} USD</td>
+                                  <td className="p-3 font-semibold text-slate-700">${h.investedAmount.toFixed(2)} USD</td>
                                   <td className="p-3 font-black text-slate-900">${h.currentValue.toFixed(2)} USD</td>
                                   <td className="p-3">
                                     <span className="font-bold text-emerald-600">
@@ -2272,7 +2287,7 @@ export default function App() {
                     </span>
                     <h2 className="text-xl font-black text-slate-900 mt-1">Pending Client Deposit Requests</h2>
                     <p className="text-xs text-slate-500">
-                      Verify transaction reference and choose Accept to credit balance or Reject to decline.
+                      Verify transaction reference and choose Accept to credit balance or Reject to decline[cite: 14].
                     </p>
                   </div>
                   <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
