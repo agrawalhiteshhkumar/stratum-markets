@@ -125,7 +125,7 @@ export default function App() {
   const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
   
   // Custom margin-based trade allocation
-  const [allocatedMarginUsd, setAllocatedMarginUsd] = useState('100');
+  const [allocatedMarginUsd, setAllocatedMarginUsd] = useState('50');
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
@@ -220,6 +220,52 @@ export default function App() {
     points[points.length - 1].close = selectedAsset.price;
     return points;
   }, [selectedAsset.symbol]);
+
+  // Helper to compute live market metrics for any open contract
+  const computeTradeMetrics = (trade) => {
+    const liveAsset = assets.find((a) => a.symbol === trade.symbol);
+    const currentPrice = liveAsset ? liveAsset.price : trade.entryPrice;
+    const decimals = liveAsset ? liveAsset.decimals : 2;
+
+    const priceDiff = trade.side === 'BUY'
+      ? (currentPrice - trade.entryPrice)
+      : (trade.entryPrice - currentPrice);
+
+    const unrealizedPnL = priceDiff * trade.units;
+    const pnlPercentage = trade.marginAllocated > 0
+      ? (unrealizedPnL / trade.marginAllocated) * 100
+      : 0;
+
+    const currentValue = Math.max(0, trade.marginAllocated + unrealizedPnL);
+
+    return {
+      currentPrice,
+      decimals,
+      unrealizedPnL,
+      pnlPercentage,
+      currentValue
+    };
+  };
+
+  // Total Portfolio Live Floating Profit/Loss
+  const portfolioSummary = useMemo(() => {
+    if (!currentUser || !currentUser.trades || currentUser.trades.length === 0) {
+      return { totalAllocated: 0, totalCurrentValue: 0, totalPnL: 0 };
+    }
+
+    let totalAllocated = 0;
+    let totalCurrentValue = 0;
+
+    currentUser.trades.forEach((t) => {
+      const { currentValue } = computeTradeMetrics(t);
+      totalAllocated += t.marginAllocated || 0;
+      totalCurrentValue += currentValue;
+    });
+
+    const totalPnL = totalCurrentValue - totalAllocated;
+
+    return { totalAllocated, totalCurrentValue, totalPnL };
+  }, [currentUser?.trades, assets]);
 
   // Single Sign-In Handler
   const handleUnifiedSignIn = (e) => {
@@ -390,7 +436,6 @@ export default function App() {
 
     setWithdrawalRequests([newWithdrawal, ...withdrawalRequests]);
 
-    // Place funds on hold by debiting the balance immediately
     const updatedUser = {
       ...currentUser,
       balance: currentUser.balance - requestedAmount,
@@ -488,7 +533,7 @@ export default function App() {
     );
   };
 
-  // Super Admin REJECTS Withdrawal Request (Re-credits the held funds)
+  // Super Admin REJECTS Withdrawal Request (Refunds held funds)
   const handleAdminRejectWithdrawal = (withdrawalId) => {
     const reason = prompt('Enter rejection reason:');
     if (reason === null) return;
@@ -504,7 +549,7 @@ export default function App() {
           );
           return {
             ...u,
-            balance: u.balance + target.amountUsd, // Refund balance
+            balance: u.balance + target.amountUsd,
             ledger: updatedLedger
           };
         }
@@ -517,7 +562,7 @@ export default function App() {
     );
   };
 
-  // Fractional Trade Execution based on dollar margin input
+  // Fractional Trade Execution
   const handleExecuteTrade = () => {
     if (!currentUser || currentUser.role !== 'customer') return;
 
@@ -551,7 +596,7 @@ export default function App() {
 
     const updated = {
       ...currentUser,
-      balance: currentUser.balance - marginToSpend, // Dedicate margin to position
+      balance: currentUser.balance - marginToSpend,
       trades: [newTx, ...(currentUser.trades || [])]
     };
 
@@ -559,29 +604,29 @@ export default function App() {
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // Closing Trade (Realizes P&L and returns margin)
+  // Closing Trade: Realizes EXACT live profit / loss and returns live equity
   const handleCloseTrade = (tradeId) => {
     if (!currentUser || currentUser.role !== 'customer') return;
     const targetTrade = currentUser.trades.find((t) => t.id === tradeId);
     if (!targetTrade) return;
 
-    // Simulated PnL (+3.5% gain returned to balance)
-    const simulatedPnL = targetTrade.marginAllocated * 0.035;
-    const returnedEquity = targetTrade.marginAllocated + simulatedPnL;
+    const { currentValue, unrealizedPnL, currentPrice } = computeTradeMetrics(targetTrade);
 
     const filtered = currentUser.trades.filter((t) => t.id !== tradeId);
     const updated = {
       ...currentUser,
-      balance: currentUser.balance + returnedEquity,
+      balance: currentUser.balance + currentValue,
       trades: filtered,
       ledger: [
         {
           id: `CL-${Math.floor(1000 + Math.random() * 9000)}`,
           date: new Date().toISOString().split('T')[0],
-          type: 'Close Trade & Realize Profit',
-          method: `${targetTrade.symbol} (${targetTrade.side} ${targetTrade.units} Lots)`,
-          amount: returnedEquity,
-          status: 'Returned to Balance'
+          type: 'Close Trade & Realize Profit/Loss',
+          method: `${targetTrade.symbol} (${targetTrade.side} ${targetTrade.units} Lots at ${currentPrice})`,
+          amount: currentValue,
+          status: unrealizedPnL >= 0
+            ? `Realized Profit: +$${unrealizedPnL.toFixed(2)}`
+            : `Realized Loss: -$${Math.abs(unrealizedPnL).toFixed(2)}`
         },
         ...(currentUser.ledger || [])
       ]
@@ -763,8 +808,8 @@ export default function App() {
                 <span className="text-xs text-slate-300">Continuous Market Liquidity</span>
               </div>
               <div>
-                <span className="text-xl font-black text-blue-400 block">Fractional Lots</span>
-                <span className="text-xs text-slate-300">Buy with any deposit size</span>
+                <span className="text-xl font-black text-blue-400 block">Live Floating P&L</span>
+                <span className="text-xs text-slate-300">Track profits before closing</span>
               </div>
               <div>
                 <span className="text-xl font-black text-emerald-400 block">Instant INR/USD</span>
@@ -1136,7 +1181,6 @@ export default function App() {
                           </select>
                         </div>
 
-                        {/* Computed Lots Callout */}
                         <div>
                           <label className="text-[11px] text-slate-600 font-semibold block mb-1">
                             Computed Lots (Fractional)
@@ -1147,7 +1191,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* EXECUTION BUTTONS */}
                       <div className="flex items-center gap-3 pt-1">
                         <button
                           onClick={() => { setTradeSide('BUY'); handleExecuteTrade(); }}
@@ -1176,7 +1219,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* ALERTS */}
                     {currentUser.kycStatus !== 'verified' && (
                       <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1225,14 +1267,14 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 2: DEPOSIT IN INR & REAL-TIME USD REFLECTION */}
+              {/* TAB 2: DEPOSIT */}
               {customerTab === 'deposit' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
                     <div>
                       <h3 className="text-base font-bold text-slate-900">Deposit Funds Through Gateway</h3>
                       <p className="text-xs text-slate-500">
-                        Enter amount in INR (₹). USD ($) trading credit is calculated automatically in real time.
+                        Enter amount in INR (₹). USD ($) trading credit is calculated automatically in real time[cite: 14].
                       </p>
                     </div>
 
@@ -1469,47 +1511,106 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 4: PORTFOLIO */}
+              {/* TAB 4: MY CONTRACTS WITH LIVE VALUE & PROFIT/LOSS COLUMNS */}
               {customerTab === 'portfolio' && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-base font-bold text-slate-900">Your Open Position Contracts</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Your Open Position Contracts</h3>
+                      <p className="text-xs text-slate-500">Live prices update continuously with floating unrealized profit and loss.</p>
+                    </div>
+
+                    {/* LIVE SUMMARY WIDGET */}
+                    <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Invested Margin</span>
+                        <strong className="text-slate-800">${portfolioSummary.totalAllocated.toFixed(2)}</strong>
+                      </div>
+                      <div className="border-l border-slate-200 pl-4">
+                        <span className="text-[10px] text-slate-400 block font-sans">Current Value</span>
+                        <strong className="text-slate-900">${portfolioSummary.totalCurrentValue.toFixed(2)}</strong>
+                      </div>
+                      <div className="border-l border-slate-200 pl-4">
+                        <span className="text-[10px] text-slate-400 block font-sans">Floating P&L</span>
+                        <strong className={portfolioSummary.totalPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {portfolioSummary.totalPnL >= 0 ? '+' : ''}${portfolioSummary.totalPnL.toFixed(2)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto">
                     <table className="w-full text-left text-xs font-mono">
-                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
                         <tr>
                           <th className="p-3">Trade ID</th>
                           <th className="p-3">Asset</th>
                           <th className="p-3">Side</th>
-                          <th className="p-3">Margin ($)</th>
+                          <th className="p-3">Allocated Margin</th>
                           <th className="p-3">Fractional Units</th>
                           <th className="p-3">Entry Price</th>
+                          <th className="p-3">Current Price</th>
+                          <th className="p-3">Current Value</th>
+                          <th className="p-3">Unrealized P&L</th>
                           <th className="p-3 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {currentUser.trades && currentUser.trades.length > 0 ? (
-                          currentUser.trades.map((t) => (
-                            <tr key={t.id}>
-                              <td className="p-3 text-slate-400">{t.id}</td>
-                              <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
-                              <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {t.side} {t.leverage}x
-                              </td>
-                              <td className="p-3 font-bold text-slate-800">${(t.marginAllocated || 0).toFixed(2)}</td>
-                              <td className="p-3 text-blue-700">{t.units}</td>
-                              <td className="p-3">{t.entryPrice}</td>
-                              <td className="p-3 text-right">
-                                <button
-                                  onClick={() => handleCloseTrade(t.id)}
-                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded text-xs font-bold"
-                                >
-                                  Close Trade & Realize Profit
-                                </button>
-                              </td>
-                            </tr>
-                          ))
+                          currentUser.trades.map((t) => {
+                            const { currentPrice, decimals, unrealizedPnL, pnlPercentage, currentValue } = computeTradeMetrics(t);
+                            const isProfit = unrealizedPnL >= 0;
+
+                            return (
+                              <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                                <td className="p-3 text-slate-400">{t.id}</td>
+                                <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
+                                <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {t.side} {t.leverage}x
+                                </td>
+                                <td className="p-3 font-semibold text-slate-800">${(t.marginAllocated || 0).toFixed(2)}</td>
+                                <td className="p-3 text-blue-700 font-semibold">{t.units}</td>
+                                <td className="p-3 text-slate-500">{t.entryPrice.toFixed(decimals)}</td>
+                                
+                                {/* LIVE CURRENT MARKET PRICE */}
+                                <td className="p-3 font-bold text-slate-900">
+                                  {currentPrice.toFixed(decimals)}
+                                </td>
+
+                                {/* LIVE CURRENT POSITION VALUE */}
+                                <td className="p-3 font-black text-slate-900">
+                                  ${currentValue.toFixed(2)}
+                                </td>
+
+                                {/* LIVE UNREALIZED FLOATING PROFIT / LOSS */}
+                                <td className="p-3">
+                                  <span className={`inline-flex items-center gap-1 font-black px-2 py-0.5 rounded text-[11px] ${
+                                    isProfit
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  }`}>
+                                    {isProfit ? '+' : ''}${unrealizedPnL.toFixed(2)} ({isProfit ? '+' : ''}{pnlPercentage.toFixed(2)}%)
+                                  </span>
+                                </td>
+
+                                {/* CLOSE TRADE BUTTON */}
+                                <td className="p-3 text-right whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleCloseTrade(t.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+                                      isProfit
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                        : 'bg-slate-800 hover:bg-slate-900 text-white'
+                                    }`}
+                                  >
+                                    Close & Realize (${currentValue.toFixed(2)})
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
                         ) : (
-                          <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
+                          <tr><td colSpan="10" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1545,7 +1646,7 @@ export default function App() {
                                 {l.amount >= 0 ? `+$${l.amount.toLocaleString()}` : `-$${Math.abs(l.amount).toLocaleString()}`}
                               </td>
                               <td className={`p-3 text-right font-bold ${
-                                l.status.includes('Approved') || l.status.includes('Processed') || l.status.includes('Returned')
+                                l.status.includes('Approved') || l.status.includes('Processed') || l.status.includes('Returned') || l.status.includes('Profit')
                                   ? 'text-emerald-600'
                                   : l.status.includes('Pending')
                                   ? 'text-amber-600'
