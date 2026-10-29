@@ -10,13 +10,11 @@ import {
   TrendingDown, Check, ArrowRight, DollarSign, Building,
   PieChart, HelpCircle, Compass, Target, Zap, Download,
   UploadCloud, AlertTriangle, FileText, CreditCard, CheckCircle,
-  IndianRupee, ArrowLeftRight, Landmark, Briefcase, Award as MedalIcon
+  IndianRupee, ArrowLeftRight, Landmark, Briefcase
 } from 'lucide-react';
 
-// Live Pegged Exchange Rate (1 USD = 90 INR)
 const USD_INR_RATE = 90.00;
 
-// --- COMMOFX ASSETS ---
 const COMMOFX_ASSETS = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', category: 'Forex', price: 1.0845, change: -0.21, spread: 0.0002, decimals: 4 },
   { symbol: 'GBP/USD', name: 'British Pound / USD', category: 'Forex', price: 1.2715, change: 0.15, spread: 0.0004, decimals: 4 },
@@ -32,7 +30,6 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// Master Managed PAMM Strategies
 const INITIAL_MANAGED_POOLS = [
   {
     id: 'POOL-ALPHA',
@@ -69,7 +66,6 @@ const INITIAL_MANAGED_POOLS = [
   }
 ];
 
-// Internal staff accounts
 const STAFF_ACCOUNTS = [
   {
     id: 'STAFF-SUB',
@@ -88,9 +84,8 @@ const STAFF_ACCOUNTS = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('website'); // 'website' | 'signin' | 'register' | 'portal'
+  const [activeView, setActiveView] = useState('website');
 
-  // Persistent Client Database
   const [usersDb, setUsersDb] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_registered_users');
@@ -100,7 +95,6 @@ export default function App() {
     }
   });
 
-  // Global Deposit Requests Queue
   const [depositRequests, setDepositRequests] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_deposit_requests');
@@ -110,7 +104,6 @@ export default function App() {
     }
   });
 
-  // Global Withdrawal Requests Queue
   const [withdrawalRequests, setWithdrawalRequests] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_withdrawal_requests');
@@ -120,7 +113,6 @@ export default function App() {
     }
   });
 
-  // Managed Pools State
   const [managedPools, setManagedPools] = useState(() => {
     try {
       const saved = localStorage.getItem('cfx_managed_pools');
@@ -148,57 +140,46 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Authentication Fields
   const [inputEmail, setInputEmail] = useState('');
   const [inputPassword, setInputPassword] = useState('');
   const [inputName, setInputName] = useState('');
   const [authErrorMessage, setAuthErrorMessage] = useState('');
 
-  // Registration KYC Document States
   const [regDocType, setRegDocType] = useState('PAN Card');
   const [regDocNumber, setRegDocNumber] = useState('');
   const [regFileName, setRegFileName] = useState('');
 
-  // Client Deposit Inputs (INR & USD)
   const [depositInr, setDepositInr] = useState('90000');
   const [paymentGateway, setPaymentGateway] = useState('UPI / Instant Transfer (BHIM, GPay, PhonePe)');
   const [txRefNumber, setTxRefNumber] = useState('');
   const [depositNotice, setDepositNotice] = useState('');
 
-  // Client Withdrawal Request Inputs
   const [withdrawAmountUsd, setWithdrawAmountUsd] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState('UPI Transfer (Instant INR)');
   const [withdrawBeneficiaryDetails, setWithdrawBeneficiaryDetails] = useState('');
   const [withdrawNotice, setWithdrawNotice] = useState('');
 
-  // Managed Investment Allocation Inputs
   const [selectedPoolId, setSelectedPoolId] = useState('POOL-ALPHA');
   const [poolInvestAmountUsd, setPoolInvestAmountUsd] = useState('100');
   const [pammNotice, setPammNotice] = useState('');
 
-  // Admin Master Trade Distribution States
   const [distributePoolId, setDistributePoolId] = useState('POOL-ALPHA');
   const [distributeProfitPct, setDistributeProfitPct] = useState('3.5');
 
-  // Market & Self-Trading State
   const [assets, setAssets] = useState(COMMOFX_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
   const [allocatedMarginUsd, setAllocatedMarginUsd] = useState('50');
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
-  // Order Confirmation Pop-up Modal State
   const [pendingConfirmationOrder, setPendingConfirmationOrder] = useState(null);
+  const [customerTab, setCustomerTab] = useState('trade');
 
-  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'managed' | 'deposit' | 'withdraw' | 'portfolio' | 'wallet'
-
-  // Converted USD based on INR deposit input
   const convertedUsd = useMemo(() => {
     const val = parseFloat(depositInr) || 0;
     return (val / USD_INR_RATE).toFixed(2);
   }, [depositInr]);
 
-  // Exact Fractional Lot Calculation
   const calculatedLots = useMemo(() => {
     const margin = parseFloat(allocatedMarginUsd) || 0;
     if (margin <= 0 || !selectedAsset.price) return '0.000000';
@@ -206,7 +187,6 @@ export default function App() {
     return units.toFixed(6);
   }, [allocatedMarginUsd, tradeLeverage, selectedAsset.price]);
 
-  // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
@@ -226,7 +206,6 @@ export default function App() {
     setDeferredPrompt(null);
   };
 
-  // Live price fluctuations
   useEffect(() => {
     const interval = setInterval(() => {
       setAssets((prev) =>
@@ -249,7 +228,6 @@ export default function App() {
     if (fresh) setSelectedAsset(fresh);
   }, [assets, selectedAsset.symbol]);
 
-  // Keep active user session in sync with updates made by Super Admin
   useEffect(() => {
     if (currentUser && currentUser.role === 'customer') {
       const updated = usersDb.find((u) => u.id === currentUser.id);
@@ -267,7 +245,6 @@ export default function App() {
     }
   }, [usersDb, currentUser]);
 
-  // Candlestick SVG generator
   const candleData = useMemo(() => {
     const points = [];
     let base = selectedAsset.price * 0.985;
@@ -284,7 +261,6 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  // Compute live trade metrics
   const computeTradeMetrics = (trade) => {
     const liveAsset = assets.find((a) => a.symbol === trade.symbol);
     const currentPrice = liveAsset ? liveAsset.price : trade.entryPrice;
@@ -304,7 +280,6 @@ export default function App() {
     return { currentPrice, decimals, unrealizedPnL, pnlPercentage, currentValue };
   };
 
-  // Portfolio live summary
   const portfolioSummary = useMemo(() => {
     if (!currentUser || !currentUser.trades || currentUser.trades.length === 0) {
       return { totalAllocated: 0, totalCurrentValue: 0, totalPnL: 0 };
@@ -323,7 +298,13 @@ export default function App() {
     return { totalAllocated, totalCurrentValue, totalPnL };
   }, [currentUser?.trades, assets]);
 
-  // Single Sign-In Handler
+  const totalOpenPositionsCount = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'customer') return 0;
+    const tradesCount = currentUser.trades ? currentUser.trades.length : 0;
+    const poolsCount = currentUser.poolHoldings ? currentUser.poolHoldings.length : 0;
+    return tradesCount + poolsCount;
+  }, [currentUser]);
+
   const handleUnifiedSignIn = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
@@ -354,7 +335,6 @@ export default function App() {
     setAuthErrorMessage('Invalid email or password. Please verify your credentials or register a new account.');
   };
 
-  // Client Registration
   const handleRegisterWithKyc = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
@@ -403,7 +383,6 @@ export default function App() {
     setRegFileName('');
   };
 
-  // PAMM Join
   const handleJoinManagedPool = (e) => {
     e.preventDefault();
     setPammNotice('');
@@ -462,10 +441,9 @@ export default function App() {
 
     setCurrentUser(updatedUser);
     setUsersDb(usersDb.map((u) => (u.id === currentUser.id ? updatedUser : u)));
-    setPammNotice(`Successfully allocated $${amount.toFixed(2)} to ${targetPool.name}. CommoFx Master Desk is now trading for your account.`);
+    setPammNotice(`Successfully allocated $${amount.toFixed(2)} to ${targetPool.name}. Your position is now active.`);
   };
 
-  // Exit PAMM
   const handleExitManagedPool = (holdingId) => {
     const targetHolding = (currentUser.poolHoldings || []).find((h) => h.id === holdingId);
     if (!targetHolding) return;
@@ -496,7 +474,6 @@ export default function App() {
     alert(`Successfully exited ${targetHolding.poolName}. $${returnAmount.toFixed(2)} USD credited back to your cash wallet.`);
   };
 
-  // Super Admin: Distribute profit
   const handleAdminDistributeMasterProfit = (e) => {
     e.preventDefault();
     const pct = parseFloat(distributeProfitPct);
@@ -551,7 +528,6 @@ export default function App() {
     alert(`Master Profit Distributed! Credited +${pct}% ($${totalPaidOut.toFixed(2)} total profit) across ${affectedInvestors} passive investors.`);
   };
 
-  // Deposit Submit
   const handleDepositSubmit = (e) => {
     e.preventDefault();
     setDepositNotice('');
@@ -605,7 +581,6 @@ export default function App() {
     setDepositNotice(`Deposit request of ₹${inrVal.toLocaleString('en-IN')} (Crediting $${usdVal.toLocaleString()} USD) submitted. Awaiting Super Admin approval.`);
   };
 
-  // Withdrawal Submit
   const handleWithdrawalSubmit = (e) => {
     e.preventDefault();
     setWithdrawNotice('');
@@ -665,7 +640,6 @@ export default function App() {
     setWithdrawNotice(`Withdrawal request for $${requestedAmount.toLocaleString()} USD (₹${(requestedAmount * USD_INR_RATE).toLocaleString('en-IN')} INR) submitted for processing.`);
   };
 
-  // Super Admin: APPROVE Deposit
   const handleAdminApproveDeposit = (requestId) => {
     const targetReq = depositRequests.find((r) => r.id === requestId);
     if (!targetReq) return;
@@ -691,7 +665,6 @@ export default function App() {
     );
   };
 
-  // Super Admin: REJECT Deposit
   const handleAdminRejectDeposit = (requestId) => {
     const reason = prompt('Enter rejection reason:');
     if (reason === null) return;
@@ -716,7 +689,6 @@ export default function App() {
     );
   };
 
-  // Super Admin: APPROVE Withdrawal
   const handleAdminApproveWithdrawal = (withdrawalId) => {
     const target = withdrawalRequests.find((w) => w.id === withdrawalId);
     if (!target) return;
@@ -738,7 +710,6 @@ export default function App() {
     );
   };
 
-  // Super Admin: REJECT Withdrawal
   const handleAdminRejectWithdrawal = (withdrawalId) => {
     const reason = prompt('Enter rejection reason:');
     if (reason === null) return;
@@ -767,9 +738,6 @@ export default function App() {
     );
   };
 
-  // -------------------------------------------------------------
-  // ORDER INITIATION -> TRIGGERS CONFIRMATION POP-UP MODAL
-  // -------------------------------------------------------------
   const handleInitiateOrder = (side) => {
     if (!currentUser || currentUser.role !== 'customer') return;
 
@@ -789,7 +757,6 @@ export default function App() {
       return;
     }
 
-    // Set order details to trigger the Confirmation Pop-up Modal
     setPendingConfirmationOrder({
       side,
       asset: selectedAsset,
@@ -801,7 +768,6 @@ export default function App() {
     });
   };
 
-  // Confirmed Execution from Modal
   const handleConfirmAndExecuteTrade = () => {
     if (!pendingConfirmationOrder || !currentUser) return;
 
@@ -825,12 +791,9 @@ export default function App() {
 
     setCurrentUser(updated);
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
-
-    // Close Confirmation Modal
     setPendingConfirmationOrder(null);
   };
 
-  // Close Self-Trade
   const handleCloseTrade = (tradeId) => {
     if (!currentUser || currentUser.role !== 'customer') return;
     const targetTrade = currentUser.trades.find((t) => t.id === tradeId);
@@ -862,7 +825,6 @@ export default function App() {
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // Admin User Modifications
   const handleAdminModifyBalance = (userId) => {
     const val = prompt('Enter new balance for client (USD):');
     if (!val || isNaN(val)) return;
@@ -881,13 +843,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white relative">
-      {/* ======================================================== */}
-      {/* POP-UP MODAL: ORDER EXECUTION CONFIRMATION               */}
-      {/* ======================================================== */}
       {pendingConfirmationOrder && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5 animate-scaleUp">
-            {/* Header */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5">
             <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-xl text-white font-bold text-xs ${
@@ -912,7 +870,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Order Specification Grid */}
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 divide-y divide-slate-200 text-xs font-mono space-y-2.5">
               <div className="flex justify-between items-center pt-1">
                 <span className="text-slate-500 font-sans">Direction & Type:</span>
@@ -956,12 +913,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Confirmation Note */}
             <p className="text-[11px] text-slate-500 text-center leading-relaxed">
               Upon confirmation, <strong>${pendingConfirmationOrder.margin.toFixed(2)}</strong> will be dedicated to this position. You can track live P&L and close anytime.
             </p>
 
-            {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-1">
               <button
                 type="button"
@@ -987,7 +942,6 @@ export default function App() {
         </div>
       )}
 
-      {/* NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
           <button onClick={() => setActiveView('website')} className="flex items-center gap-2.5 text-left group">
@@ -1054,7 +1008,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Live Market Price Tape */}
         <div className="bg-slate-900 text-white py-1 px-4 overflow-x-auto text-[11px] font-mono border-t border-slate-800">
           <div className="max-w-6xl mx-auto flex items-center gap-7 whitespace-nowrap">
             <span className="text-blue-400 font-sans font-bold text-[10px] uppercase flex items-center gap-1">
@@ -1073,7 +1026,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* 1. PUBLIC WEBSITE */}
       {activeView === 'website' && (
         <div className="flex-1 space-y-16 pb-20">
           <section className="bg-gradient-to-b from-blue-50/70 via-white to-slate-50 pt-14 pb-14 border-b border-slate-200">
@@ -1109,7 +1061,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* 4 CORE TRUST BADGES */}
           <section className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="bg-slate-900 text-white rounded-3xl p-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
               <div>
@@ -1133,7 +1084,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. UNIFIED SIGN-IN */}
       {activeView === 'signin' && (
         <div className="flex-1 flex items-center justify-center p-4 py-16">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-8 shadow-2xl space-y-6">
@@ -1191,7 +1141,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. REGISTRATION */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-12">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg p-8 shadow-2xl space-y-6">
@@ -1249,7 +1198,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* KYC Document Upload Section */}
               <div className="space-y-3 pt-2">
                 <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block border-b border-slate-100 pb-1">
                   2. Mandatory KYC Document Upload
@@ -1331,13 +1279,10 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. WORKSPACES */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* CUSTOMER WORKSPACE */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
-              {/* Account Header with Status Banner */}
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">Investor Account</span>
@@ -1369,14 +1314,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Navigation Tabs */}
               <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600 overflow-x-auto">
                 {[
                   { id: 'trade', label: 'Self Trading Desk' },
                   { id: 'managed', label: 'Managed Funds (We Trade For You)' },
                   { id: 'deposit', label: 'Deposit (INR / USD)' },
                   { id: 'withdraw', label: 'Withdraw Funds' },
-                  { id: 'portfolio', label: `My Positions (${currentUser.trades ? currentUser.trades.length : 0})` },
+                  { id: 'portfolio', label: `My Positions (${totalOpenPositionsCount})` },
                   { id: 'wallet', label: 'Personal Ledger' }
                 ].map((t) => (
                   <button
@@ -1389,7 +1333,7 @@ export default function App() {
                 ))}
               </div>
 
-              {/* TAB 1: SELF TRADING DESK WITH POP-UP CONFIRMATION */}
+              {/* TAB 1: SELF TRADING DESK */}
               {customerTab === 'trade' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
@@ -1429,7 +1373,6 @@ export default function App() {
                       </svg>
                     </div>
 
-                    {/* FRACTIONAL TRADE ORDER FORM */}
                     <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold text-slate-800">Order Allocation</span>
@@ -1501,7 +1444,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* BUTTONS THAT TRIGGER THE CONFIRMATION POP-UP */}
                       <div className="flex items-center gap-3 pt-1">
                         <button
                           type="button"
@@ -1771,7 +1713,7 @@ export default function App() {
                     <div>
                       <h3 className="text-base font-bold text-slate-900">Deposit Funds Through Gateway</h3>
                       <p className="text-xs text-slate-500">
-                        Enter amount in INR (₹). USD ($) trading credit is calculated automatically in real time[cite: 14].
+                        Enter amount in INR (₹). USD ($) trading credit is calculated automatically in real time.
                       </p>
                     </div>
 
@@ -1986,96 +1928,171 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 5: SELF TRADING PORTFOLIO WITH LIVE VALUE */}
+              {/* TAB 5: UNIFIED MY POSITIONS */}
               {customerTab === 'portfolio' && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900">Your Open Self-Trade Positions</h3>
-                      <p className="text-xs text-slate-500">Live prices update continuously with floating unrealized profit and loss.</p>
+                <div className="space-y-6">
+                  {/* MANAGED STRATEGY POSITIONS */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                          <Briefcase className="w-4 h-4 text-blue-600" />
+                          Managed Strategy Positions (Hands-Free PAMM)
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Funds traded directly on your behalf by CommoFx Master Desks.
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
+                        {currentUser.poolHoldings ? currentUser.poolHoldings.length : 0} Active Strategy Pools
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 text-xs font-mono">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-sans">Invested Margin</span>
-                        <strong className="text-slate-800">${portfolioSummary.totalAllocated.toFixed(2)}</strong>
-                      </div>
-                      <div className="border-l border-slate-200 pl-4">
-                        <span className="text-[10px] text-slate-400 block font-sans">Current Value</span>
-                        <strong className="text-slate-900">${portfolioSummary.totalCurrentValue.toFixed(2)}</strong>
-                      </div>
-                      <div className="border-l border-slate-200 pl-4">
-                        <span className="text-[10px] text-slate-400 block font-sans">Floating P&L</span>
-                        <strong className={portfolioSummary.totalPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                          {portfolioSummary.totalPnL >= 0 ? '+' : ''}${portfolioSummary.totalPnL.toFixed(2)}
-                        </strong>
-                      </div>
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
+                          <tr>
+                            <th className="p-3">Position Ref</th>
+                            <th className="p-3">Strategy Desk</th>
+                            <th className="p-3">Allocated Capital</th>
+                            <th className="p-3">Current Net Value</th>
+                            <th className="p-3">Accumulated Profits</th>
+                            <th className="p-3">Entry Date</th>
+                            <th className="p-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {currentUser.poolHoldings && currentUser.poolHoldings.length > 0 ? (
+                            currentUser.poolHoldings.map((h) => {
+                              const gain = h.currentValue - h.investedAmount;
+                              return (
+                                <tr key={h.id} className="hover:bg-slate-50">
+                                  <td className="p-3 text-slate-400">{h.id}</td>
+                                  <td className="p-3 font-bold text-slate-900 font-sans">{h.poolName}</td>
+                                  <td className="p-3 font-semibold text-slate-800">${h.investedAmount.toFixed(2)} USD</td>
+                                  <td className="p-3 font-black text-slate-900">${h.currentValue.toFixed(2)} USD</td>
+                                  <td className="p-3">
+                                    <span className="font-bold text-emerald-600">
+                                      +${gain.toFixed(2)} ({((gain / h.investedAmount) * 100).toFixed(2)}%)
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-slate-500">{h.joinedDate}</td>
+                                  <td className="p-3 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleExitManagedPool(h.id)}
+                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm"
+                                    >
+                                      Withdraw Capital & Profit (${h.currentValue.toFixed(2)})
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan="7" className="p-6 text-center text-slate-400 font-sans">
+                                No active managed strategy allocations. Join a pool in the <strong>Managed Funds</strong> tab to allocate capital.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
-                  <div className="border border-slate-200 rounded-xl overflow-x-auto">
-                    <table className="w-full text-left text-xs font-mono">
-                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
-                        <tr>
-                          <th className="p-3">Trade ID</th>
-                          <th className="p-3">Asset</th>
-                          <th className="p-3">Side</th>
-                          <th className="p-3">Allocated Margin</th>
-                          <th className="p-3">Fractional Units</th>
-                          <th className="p-3">Entry Price</th>
-                          <th className="p-3">Current Price</th>
-                          <th className="p-3">Current Value</th>
-                          <th className="p-3">Unrealized P&L</th>
-                          <th className="p-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {currentUser.trades && currentUser.trades.length > 0 ? (
-                          currentUser.trades.map((t) => {
-                            const { currentPrice, decimals, unrealizedPnL, pnlPercentage, currentValue } = computeTradeMetrics(t);
-                            const isProfit = unrealizedPnL >= 0;
+                  {/* SELF TRADED POSITIONS */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-emerald-600" />
+                          Self-Executed Trading Contracts
+                        </h3>
+                        <p className="text-xs text-slate-500">Live prices update continuously with floating unrealized profit and loss.</p>
+                      </div>
 
-                            return (
-                              <tr key={t.id} className="hover:bg-slate-50/70 transition">
-                                <td className="p-3 text-slate-400">{t.id}</td>
-                                <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
-                                <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {t.side} {t.leverage}x
-                                </td>
-                                <td className="p-3 font-semibold text-slate-800">${(t.marginAllocated || 0).toFixed(2)}</td>
-                                <td className="p-3 text-blue-700 font-semibold">{t.units}</td>
-                                <td className="p-3 text-slate-500">{t.entryPrice.toFixed(decimals)}</td>
-                                <td className="p-3 font-bold text-slate-900">{currentPrice.toFixed(decimals)}</td>
-                                <td className="p-3 font-black text-slate-900">${currentValue.toFixed(2)}</td>
-                                <td className="p-3">
-                                  <span className={`inline-flex items-center gap-1 font-black px-2 py-0.5 rounded text-[11px] ${
-                                    isProfit
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  }`}>
-                                    {isProfit ? '+' : ''}${unrealizedPnL.toFixed(2)} ({isProfit ? '+' : ''}{pnlPercentage.toFixed(2)}%)
-                                  </span>
-                                </td>
-                                <td className="p-3 text-right whitespace-nowrap">
-                                  <button
-                                    onClick={() => handleCloseTrade(t.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+                      <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-sans">Invested Margin</span>
+                          <strong className="text-slate-800">${portfolioSummary.totalAllocated.toFixed(2)}</strong>
+                        </div>
+                        <div className="border-l border-slate-200 pl-4">
+                          <span className="text-[10px] text-slate-400 block font-sans">Current Value</span>
+                          <strong className="text-slate-900">${portfolioSummary.totalCurrentValue.toFixed(2)}</strong>
+                        </div>
+                        <div className="border-l border-slate-200 pl-4">
+                          <span className="text-[10px] text-slate-400 block font-sans">Floating P&L</span>
+                          <strong className={portfolioSummary.totalPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                            {portfolioSummary.totalPnL >= 0 ? '+' : ''}${portfolioSummary.totalPnL.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
+                          <tr>
+                            <th className="p-3">Trade ID</th>
+                            <th className="p-3">Asset</th>
+                            <th className="p-3">Side</th>
+                            <th className="p-3">Allocated Margin</th>
+                            <th className="p-3">Fractional Units</th>
+                            <th className="p-3">Entry Price</th>
+                            <th className="p-3">Current Price</th>
+                            <th className="p-3">Current Value</th>
+                            <th className="p-3">Unrealized P&L</th>
+                            <th className="p-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {currentUser.trades && currentUser.trades.length > 0 ? (
+                            currentUser.trades.map((t) => {
+                              const { currentPrice, decimals, unrealizedPnL, pnlPercentage, currentValue } = computeTradeMetrics(t);
+                              const isProfit = unrealizedPnL >= 0;
+
+                              return (
+                                <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                                  <td className="p-3 text-slate-400">{t.id}</td>
+                                  <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
+                                  <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {t.side} {t.leverage}x
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-800">${(t.marginAllocated || 0).toFixed(2)}</td>
+                                  <td className="p-3 text-blue-700 font-semibold">{t.units}</td>
+                                  <td className="p-3 text-slate-500">{t.entryPrice.toFixed(decimals)}</td>
+                                  <td className="p-3 font-bold text-slate-900">{currentPrice.toFixed(decimals)}</td>
+                                  <td className="p-3 font-black text-slate-900">${currentValue.toFixed(2)}</td>
+                                  <td className="p-3">
+                                    <span className={`inline-flex items-center gap-1 font-black px-2 py-0.5 rounded text-[11px] ${
                                       isProfit
-                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
-                                        : 'bg-slate-800 hover:bg-slate-900 text-white'
-                                    }`}
-                                  >
-                                    Close & Realize (${currentValue.toFixed(2)})
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr><td colSpan="10" className="p-6 text-center text-slate-400 font-sans">No open self-trades.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}>
+                                      {isProfit ? '+' : ''}${unrealizedPnL.toFixed(2)} ({isProfit ? '+' : ''}{pnlPercentage.toFixed(2)}%)
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleCloseTrade(t.id)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+                                        isProfit
+                                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                          : 'bg-slate-800 hover:bg-slate-900 text-white'
+                                      }`}
+                                    >
+                                      Close & Realize (${currentValue.toFixed(2)})
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr><td colSpan="10" className="p-6 text-center text-slate-400 font-sans">No open self-trade positions.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2129,9 +2146,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* SUB-ADMIN: AUDIT DESK                                    */}
-          {/* ======================================================== */}
           {currentUser.role === 'subadmin' && (
             <div className="space-y-6">
               <div className="bg-white border border-amber-300 rounded-3xl shadow-xl p-8 space-y-6">
@@ -2195,12 +2209,8 @@ export default function App() {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* SUPER ADMIN: MASTER DESK, DEPOSITS, PAYOUTS, KYC         */}
-          {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="space-y-6">
-              {/* SECTION 1: MASTER STRATEGY POOL TRADING & PROFIT DISTRIBUTION */}
               <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl shadow-xl p-8 space-y-5 border border-blue-800">
                 <div className="flex justify-between items-start border-b border-white/10 pb-4">
                   <div>
@@ -2240,4 +2250,297 @@ export default function App() {
                         placeholder="3.5"
                         value={distributeProfitPct}
                         onChange={(e) => setDistributeProfitPct(e.target.value)}
-                        className="w-full bg-
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-white font-mono font-bold text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider transition shadow-lg shadow-amber-500/20"
+                  >
+                    Distribute Profit to Pool
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white border border-blue-300 rounded-3xl shadow-xl p-8 space-y-4">
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+                  <div>
+                    <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
+                      Gateway Deposit Queue
+                    </span>
+                    <h2 className="text-xl font-black text-slate-900 mt-1">Pending Client Deposit Requests</h2>
+                    <p className="text-xs text-slate-500">
+                      Verify transaction reference and choose Accept to credit balance or Reject to decline.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
+                    {depositRequests.filter((r) => r.status === 'pending').length} Pending
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3.5">Request ID</th>
+                        <th className="p-3.5">Client</th>
+                        <th className="p-3.5">Gateway & Ref</th>
+                        <th className="p-3.5">INR Deposited</th>
+                        <th className="p-3.5">USD To Credit</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Decision Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {depositRequests.length > 0 ? (
+                        depositRequests.map((req) => (
+                          <tr key={req.id} className="hover:bg-slate-50">
+                            <td className="p-3.5 text-slate-400">{req.id}</td>
+                            <td className="p-3.5 font-bold text-slate-900 font-sans">
+                              {req.userName}
+                              <span className="text-[10px] text-slate-400 font-mono block">{req.userEmail}</span>
+                            </td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-800 block">{req.gateway}</span>
+                              <span className="text-[10px] text-blue-600 block">Ref: {req.txRef}</span>
+                            </td>
+                            <td className="p-3.5 font-bold text-slate-800">
+                              ₹{(req.amountInr || req.amount * USD_INR_RATE).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5 font-black text-emerald-600 text-sm">
+                              ${(req.amountUsd || req.amount).toLocaleString()} USD
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                req.status === 'accepted' || req.status === 'approved'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : req.status === 'rejected'
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}>
+                                {req.status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right space-x-2">
+                              {req.status === 'pending' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminApproveDeposit(req.id)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
+                                  >
+                                    Accept (Credit)
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminRejectDeposit(req.id)}
+                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic">Completed</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No deposit requests submitted yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white border border-emerald-300 rounded-3xl shadow-xl p-8 space-y-4">
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+                  <div>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
+                      Payout & Disbursal Queue
+                    </span>
+                    <h2 className="text-xl font-black text-slate-900 mt-1">Client Withdrawal Requests</h2>
+                    <p className="text-xs text-slate-500">
+                      Transfer funds to investor's bank/UPI and approve payout to complete transaction.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl">
+                    {withdrawalRequests.filter((w) => w.status === 'pending').length} Pending Payouts
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3.5">Withdrawal ID</th>
+                        <th className="p-3.5">Client</th>
+                        <th className="p-3.5">Destination & Beneficiary</th>
+                        <th className="p-3.5">USD Payout</th>
+                        <th className="p-3.5">INR Disbursal</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Disbursal Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {withdrawalRequests.length > 0 ? (
+                        withdrawalRequests.map((wth) => (
+                          <tr key={wth.id} className="hover:bg-slate-50">
+                            <td className="p-3.5 text-slate-400">{wth.id}</td>
+                            <td className="p-3.5 font-bold text-slate-900 font-sans">
+                              {wth.userName}
+                              <span className="text-[10px] text-slate-400 font-mono block">{wth.userEmail}</span>
+                            </td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-800 block">{wth.method}</span>
+                              <span className="text-[10px] text-slate-600 block break-all font-sans">{wth.beneficiary}</span>
+                            </td>
+                            <td className="p-3.5 font-black text-slate-900 text-sm">
+                              ${wth.amountUsd.toFixed(2)} USD
+                            </td>
+                            <td className="p-3.5 font-bold text-emerald-700">
+                              ₹{wth.amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                wth.status === 'completed'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : wth.status === 'rejected'
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}>
+                                {wth.status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right space-x-2">
+                              {wth.status === 'pending' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminApproveWithdrawal(wth.id)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
+                                  >
+                                    Approve & Mark Paid
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminRejectWithdrawal(wth.id)}
+                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
+                                  >
+                                    Reject (Refund)
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic">Processed</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No withdrawal requests placed yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
+                <div className="flex justify-between items-start border-b border-slate-200 pb-4">
+                  <div>
+                    <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
+                      Super Admin Root Terminal
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900 mt-1">Master KYC Clearance & Client Accounts</h2>
+                    <p className="text-xs text-slate-500">Approve client documents to unlock trading or manually adjust balances.</p>
+                  </div>
+                  <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                    <Shield className="w-4 h-4" /> Root Clearance
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-white text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3.5">Client</th>
+                        <th className="p-3.5">Email</th>
+                        <th className="p-3.5">Document Details</th>
+                        <th className="p-3.5">Cash Balance</th>
+                        <th className="p-3.5">Pool Investments</th>
+                        <th className="p-3.5">KYC Status</th>
+                        <th className="p-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {usersDb.length > 0 ? (
+                        usersDb.map((u) => (
+                          <tr key={u.id} className="hover:bg-slate-50">
+                            <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
+                            <td className="p-3.5 text-slate-600">{u.email}</td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-800 block">{u.kycDocument?.type || 'No Document'}</span>
+                              <span className="text-[10px] text-slate-500 font-mono block">Doc: {u.kycDocument?.number || 'N/A'}</span>
+                              <span className="text-[10px] text-blue-600 font-mono block flex items-center gap-1">
+                                <FileText className="w-3 h-3" /> {u.kycDocument?.filename || 'proof.pdf'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
+                            <td className="p-3.5 font-bold text-blue-600">${(u.allocatedInPools || 0).toLocaleString()}</td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                u.kycStatus === 'verified'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {u.kycStatus}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right space-x-2">
+                              <button
+                                onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold text-white transition ${
+                                  u.kycStatus === 'verified'
+                                    ? 'bg-amber-600 hover:bg-amber-700'
+                                    : 'bg-emerald-600 hover:bg-emerald-700'
+                                }`}
+                              >
+                                {u.kycStatus === 'verified' ? 'Revoke KYC (Lock)' : 'Approve KYC (Unlock)'}
+                              </button>
+                              <button
+                                onClick={() => handleAdminModifyBalance(u.id)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                              >
+                                Edit Balance
+                              </button>
+                              <button
+                                onClick={() => handleAdminDeleteUser(u.id)}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No client records registered yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <footer className="bg-white border-t border-slate-200 mt-auto py-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <strong className="text-slate-800 font-bold">COMMOFX</strong> — COMMO FOREX
+          </div>
+          <div className="text-center sm:text-right text-[11px] text-slate-400">
+            24-Hour Interbank Liquidity & Commodities Infrastructure
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
