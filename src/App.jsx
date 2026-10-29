@@ -32,7 +32,7 @@ const COMMOFX_ASSETS = [
   { symbol: 'US100', name: 'Nasdaq 100 Tech Index', category: 'Indices', price: 19840.00, change: 0.94, spread: 1.5, decimals: 2 }
 ];
 
-// Master Managed PAMM Strategies (Managed on behalf of passive clients)
+// Master Managed PAMM Strategies
 const INITIAL_MANAGED_POOLS = [
   {
     id: 'POOL-ALPHA',
@@ -187,7 +187,10 @@ export default function App() {
   const [tradeLeverage, setTradeLeverage] = useState(10);
   const [tradeSide, setTradeSide] = useState('BUY');
 
-  const [customerTab, setCustomerTab] = useState('managed'); // 'managed' (PAMM) | 'trade' | 'deposit' | 'withdraw' | 'portfolio' | 'wallet'
+  // Order Confirmation Pop-up Modal State
+  const [pendingConfirmationOrder, setPendingConfirmationOrder] = useState(null);
+
+  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'managed' | 'deposit' | 'withdraw' | 'portfolio' | 'wallet'
 
   // Converted USD based on INR deposit input
   const convertedUsd = useMemo(() => {
@@ -195,7 +198,7 @@ export default function App() {
     return (val / USD_INR_RATE).toFixed(2);
   }, [depositInr]);
 
-  // Exact Fractional Lot Calculation down to 6 decimals based on dollar allocation
+  // Exact Fractional Lot Calculation
   const calculatedLots = useMemo(() => {
     const margin = parseFloat(allocatedMarginUsd) || 0;
     if (margin <= 0 || !selectedAsset.price) return '0.000000';
@@ -281,7 +284,7 @@ export default function App() {
     return points;
   }, [selectedAsset.symbol]);
 
-  // Helper for computing live individual trade metrics
+  // Compute live trade metrics
   const computeTradeMetrics = (trade) => {
     const liveAsset = assets.find((a) => a.symbol === trade.symbol);
     const currentPrice = liveAsset ? liveAsset.price : trade.entryPrice;
@@ -301,7 +304,7 @@ export default function App() {
     return { currentPrice, decimals, unrealizedPnL, pnlPercentage, currentValue };
   };
 
-  // Total Open Portfolio Summary
+  // Portfolio live summary
   const portfolioSummary = useMemo(() => {
     if (!currentUser || !currentUser.trades || currentUser.trades.length === 0) {
       return { totalAllocated: 0, totalCurrentValue: 0, totalPnL: 0 };
@@ -351,7 +354,7 @@ export default function App() {
     setAuthErrorMessage('Invalid email or password. Please verify your credentials or register a new account.');
   };
 
-  // Client Registration (Zero Balance Starting Point)
+  // Client Registration
   const handleRegisterWithKyc = (e) => {
     e.preventDefault();
     setAuthErrorMessage('');
@@ -375,7 +378,7 @@ export default function App() {
       role: 'customer',
       balance: 0.00,
       allocatedInPools: 0.00,
-      poolHoldings: [], // Stores PAMM investments
+      poolHoldings: [],
       kycStatus: 'pending',
       kycDocument: {
         type: regDocType,
@@ -400,9 +403,7 @@ export default function App() {
     setRegFileName('');
   };
 
-  // -------------------------------------------------------------
-  // PAMM / MANAGED POOL OPERATIONS (AUTO-TRADING FOR NON-TRADERS)
-  // -------------------------------------------------------------
+  // PAMM Join
   const handleJoinManagedPool = (e) => {
     e.preventDefault();
     setPammNotice('');
@@ -464,7 +465,7 @@ export default function App() {
     setPammNotice(`Successfully allocated $${amount.toFixed(2)} to ${targetPool.name}. CommoFx Master Desk is now trading for your account.`);
   };
 
-  // Exit PAMM Pool and return capital + profit back to Cash Balance
+  // Exit PAMM
   const handleExitManagedPool = (holdingId) => {
     const targetHolding = (currentUser.poolHoldings || []).find((h) => h.id === holdingId);
     if (!targetHolding) return;
@@ -495,7 +496,7 @@ export default function App() {
     alert(`Successfully exited ${targetHolding.poolName}. $${returnAmount.toFixed(2)} USD credited back to your cash wallet.`);
   };
 
-  // Super Admin: Post Master Trade Win & Distribute Proportional Profits to All Passive Investors
+  // Super Admin: Distribute profit
   const handleAdminDistributeMasterProfit = (e) => {
     e.preventDefault();
     const pct = parseFloat(distributeProfitPct);
@@ -550,7 +551,7 @@ export default function App() {
     alert(`Master Profit Distributed! Credited +${pct}% ($${totalPaidOut.toFixed(2)} total profit) across ${affectedInvestors} passive investors.`);
   };
 
-  // Client Submits Fund Request
+  // Deposit Submit
   const handleDepositSubmit = (e) => {
     e.preventDefault();
     setDepositNotice('');
@@ -604,7 +605,7 @@ export default function App() {
     setDepositNotice(`Deposit request of ₹${inrVal.toLocaleString('en-IN')} (Crediting $${usdVal.toLocaleString()} USD) submitted. Awaiting Super Admin approval.`);
   };
 
-  // Client Submits Withdrawal Request
+  // Withdrawal Submit
   const handleWithdrawalSubmit = (e) => {
     e.preventDefault();
     setWithdrawNotice('');
@@ -766,8 +767,10 @@ export default function App() {
     );
   };
 
-  // Fractional Self-Trade Execution
-  const handleExecuteTrade = () => {
+  // -------------------------------------------------------------
+  // ORDER INITIATION -> TRIGGERS CONFIRMATION POP-UP MODAL
+  // -------------------------------------------------------------
+  const handleInitiateOrder = (side) => {
     if (!currentUser || currentUser.role !== 'customer') return;
 
     if (currentUser.kycStatus !== 'verified') {
@@ -786,26 +789,45 @@ export default function App() {
       return;
     }
 
-    const fractionalUnits = parseFloat(calculatedLots);
+    // Set order details to trigger the Confirmation Pop-up Modal
+    setPendingConfirmationOrder({
+      side,
+      asset: selectedAsset,
+      margin: marginToSpend,
+      leverage: Number(tradeLeverage),
+      lots: calculatedLots,
+      price: selectedAsset.price,
+      totalExposure: (marginToSpend * Number(tradeLeverage)).toFixed(2)
+    });
+  };
+
+  // Confirmed Execution from Modal
+  const handleConfirmAndExecuteTrade = () => {
+    if (!pendingConfirmationOrder || !currentUser) return;
+
+    const { side, asset, margin, leverage, lots, price } = pendingConfirmationOrder;
 
     const newTx = {
       id: `TX-${Math.floor(10000 + Math.random() * 90000)}`,
-      symbol: selectedAsset.symbol,
-      side: tradeSide,
-      marginAllocated: marginToSpend,
-      units: fractionalUnits,
-      leverage: Number(tradeLeverage),
-      entryPrice: selectedAsset.price
+      symbol: asset.symbol,
+      side: side,
+      marginAllocated: margin,
+      units: parseFloat(lots),
+      leverage: leverage,
+      entryPrice: price
     };
 
     const updated = {
       ...currentUser,
-      balance: currentUser.balance - marginToSpend,
+      balance: currentUser.balance - margin,
       trades: [newTx, ...(currentUser.trades || [])]
     };
 
     setCurrentUser(updated);
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+
+    // Close Confirmation Modal
+    setPendingConfirmationOrder(null);
   };
 
   // Close Self-Trade
@@ -858,7 +880,113 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white relative">
+      {/* ======================================================== */}
+      {/* POP-UP MODAL: ORDER EXECUTION CONFIRMATION               */}
+      {/* ======================================================== */}
+      {pendingConfirmationOrder && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5 animate-scaleUp">
+            {/* Header */}
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-xl text-white font-bold text-xs ${
+                  pendingConfirmationOrder.side === 'BUY' ? 'bg-emerald-600' : 'bg-rose-600'
+                }`}>
+                  {pendingConfirmationOrder.side}
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">
+                    Confirm Order Placement
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {pendingConfirmationOrder.asset.symbol} ({pendingConfirmationOrder.asset.name})
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setPendingConfirmationOrder(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Order Specification Grid */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 divide-y divide-slate-200 text-xs font-mono space-y-2.5">
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-slate-500 font-sans">Direction & Type:</span>
+                <strong className={`font-bold ${
+                  pendingConfirmationOrder.side === 'BUY' ? 'text-emerald-700' : 'text-rose-700'
+                }`}>
+                  {pendingConfirmationOrder.side === 'BUY' ? 'BUY (LONG)' : 'SELL (SHORT)'}
+                </strong>
+              </div>
+
+              <div className="flex justify-between items-center pt-2.5">
+                <span className="text-slate-500 font-sans">Execution Price:</span>
+                <strong className="text-slate-900 font-bold">
+                  {pendingConfirmationOrder.price.toFixed(pendingConfirmationOrder.asset.decimals)}
+                </strong>
+              </div>
+
+              <div className="flex justify-between items-center pt-2.5">
+                <span className="text-slate-500 font-sans">Allocated Margin:</span>
+                <div className="text-right">
+                  <strong className="text-slate-900 font-black">${pendingConfirmationOrder.margin.toFixed(2)} USD</strong>
+                  <span className="text-[10px] text-slate-400 block font-sans">
+                    ≈ ₹{(pendingConfirmationOrder.margin * USD_INR_RATE).toLocaleString('en-IN', { minimumFractionDigits: 2 })} INR
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-2.5">
+                <span className="text-slate-500 font-sans">Leverage Multiplier:</span>
+                <strong className="text-blue-700 font-bold">{pendingConfirmationOrder.leverage}x Dynamic</strong>
+              </div>
+
+              <div className="flex justify-between items-center pt-2.5">
+                <span className="text-slate-500 font-sans">Computed Lot Size:</span>
+                <strong className="text-blue-700 font-black">{pendingConfirmationOrder.lots} Lots</strong>
+              </div>
+
+              <div className="flex justify-between items-center pt-2.5">
+                <span className="text-slate-500 font-sans">Total Market Exposure:</span>
+                <strong className="text-slate-900 font-black">${pendingConfirmationOrder.totalExposure} USD</strong>
+              </div>
+            </div>
+
+            {/* Confirmation Note */}
+            <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+              Upon confirmation, <strong>${pendingConfirmationOrder.margin.toFixed(2)}</strong> will be dedicated to this position. You can track live P&L and close anytime.
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setPendingConfirmationOrder(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+              >
+                Cancel / Edit
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmAndExecuteTrade}
+                className={`flex-1 py-3 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition shadow-lg ${
+                  pendingConfirmationOrder.side === 'BUY'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                }`}
+              >
+                Confirm & Execute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* NAVBAR */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
@@ -989,8 +1117,8 @@ export default function App() {
                 <span className="text-xs text-slate-300">We trade, you share profits</span>
               </div>
               <div>
-                <span className="text-xl font-black text-blue-400 block">Fractional Lots</span>
-                <span className="text-xs text-slate-300">Start with any deposit size</span>
+                <span className="text-xl font-black text-blue-400 block">Order Confirmation</span>
+                <span className="text-xs text-slate-300">Safe verified execution</span>
               </div>
               <div>
                 <span className="text-xl font-black text-emerald-400 block">Instant INR/USD</span>
@@ -1244,8 +1372,8 @@ export default function App() {
               {/* Navigation Tabs */}
               <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600 overflow-x-auto">
                 {[
-                  { id: 'managed', label: 'Managed Funds (We Trade For You)' },
                   { id: 'trade', label: 'Self Trading Desk' },
+                  { id: 'managed', label: 'Managed Funds (We Trade For You)' },
                   { id: 'deposit', label: 'Deposit (INR / USD)' },
                   { id: 'withdraw', label: 'Withdraw Funds' },
                   { id: 'portfolio', label: `My Positions (${currentUser.trades ? currentUser.trades.length : 0})` },
@@ -1261,194 +1389,7 @@ export default function App() {
                 ))}
               </div>
 
-              {/* TAB 1: MANAGED FUNDS / PAMM POOLS (FOR NON-TRADERS) */}
-              {customerTab === 'managed' && (
-                <div className="space-y-6">
-                  <div className="bg-gradient-to-r from-blue-900 via-blue-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <div className="space-y-2 max-w-xl">
-                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">
-                        Automated Wealth Management
-                      </span>
-                      <h3 className="text-2xl font-black tracking-tight">CommoFx Master PAMM Strategies</h3>
-                      <p className="text-xs text-blue-200 leading-relaxed">
-                        Don't know trading? Our institutional desk executes the trades for you on a collective pool. Sit back and watch your daily proportional gains update automatically.
-                      </p>
-                    </div>
-
-                    <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center text-xs font-mono">
-                      <span className="text-slate-300 block text-[10px]">Your Total Pool Assets</span>
-                      <strong className="text-2xl font-black text-amber-400">
-                        ${(currentUser.allocatedInPools || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {pammNotice && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{pammNotice}</span>
-                    </div>
-                  )}
-
-                  {/* ACTIVE INVESTMENTS OVERVIEW */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                    <h4 className="font-bold text-sm text-slate-900">Your Active Strategy Allocations</h4>
-                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
-                          <tr>
-                            <th className="p-3">Holding ID</th>
-                            <th className="p-3">Strategy Fund</th>
-                            <th className="p-3">Capital Allocated</th>
-                            <th className="p-3">Current Value</th>
-                            <th className="p-3">Total Gains</th>
-                            <th className="p-3">Joined Date</th>
-                            <th className="p-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {currentUser.poolHoldings && currentUser.poolHoldings.length > 0 ? (
-                            currentUser.poolHoldings.map((h) => {
-                              const gain = h.currentValue - h.investedAmount;
-                              return (
-                                <tr key={h.id} className="hover:bg-slate-50">
-                                  <td className="p-3 text-slate-400">{h.id}</td>
-                                  <td className="p-3 font-bold text-slate-900 font-sans">{h.poolName}</td>
-                                  <td className="p-3 font-semibold text-slate-700">${h.investedAmount.toFixed(2)}</td>
-                                  <td className="p-3 font-black text-slate-900">${h.currentValue.toFixed(2)}</td>
-                                  <td className="p-3">
-                                    <span className="font-bold text-emerald-600">
-                                      +${gain.toFixed(2)} ({((gain / h.investedAmount) * 100).toFixed(2)}%)
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-slate-500">{h.joinedDate}</td>
-                                  <td className="p-3 text-right whitespace-nowrap">
-                                    <button
-                                      onClick={() => handleExitManagedPool(h.id)}
-                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold transition"
-                                    >
-                                      Withdraw Capital & Profit
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          ) : (
-                            <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">You have no active managed strategy allocations yet. Select a pool below to start earning hands-free.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* POOL SELECTION CARDS */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {managedPools.map((pool) => (
-                      <div key={pool.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4 hover:border-blue-500 transition">
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start">
-                            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">
-                              {pool.riskLevel}
-                            </span>
-                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-mono">
-                              {pool.historicalReturn}
-                            </span>
-                          </div>
-                          <h4 className="font-black text-slate-900 text-base">{pool.name}</h4>
-                          <p className="text-xs text-slate-500">{pool.focus}</p>
-
-                          <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs font-mono">
-                            <div className="flex justify-between text-slate-600">
-                              <span>Win Rate:</span>
-                              <strong className="text-slate-900">{pool.winRate}</strong>
-                            </div>
-                            <div className="flex justify-between text-slate-600">
-                              <span>Total Capital Managed:</span>
-                              <strong className="text-slate-900">${pool.totalAUM.toLocaleString()}</strong>
-                            </div>
-                            <div className="flex justify-between text-slate-600">
-                              <span>Min Deposit:</span>
-                              <strong className="text-slate-900">${pool.minDeposit} USD</strong>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setSelectedPoolId(pool.id);
-                            setPoolInvestAmountUsd(Math.max(pool.minDeposit, Math.min(currentUser.balance, 500)).toString());
-                          }}
-                          className={`w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                            selectedPoolId === pool.id
-                              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {selectedPoolId === pool.id ? 'Selected' : 'Select Strategy'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ONE CLICK ALLOCATION FORM */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                    <h4 className="font-bold text-sm text-slate-900">
-                      Allocate Funds to Selected Strategy ({managedPools.find((p) => p.id === selectedPoolId)?.name})
-                    </h4>
-
-                    <form onSubmit={handleJoinManagedPool} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end text-xs">
-                      <div>
-                        <label className="text-slate-600 block mb-1 font-semibold">
-                          Investment Amount (USD $)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-2.5 font-bold text-slate-400">$</span>
-                          <input
-                            type="number"
-                            required
-                            min="10"
-                            step="any"
-                            value={poolInvestAmountUsd}
-                            onChange={(e) => setPoolInvestAmountUsd(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-slate-900 font-bold focus:outline-none focus:border-blue-600 font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPoolInvestAmountUsd(Math.floor(currentUser.balance * 0.50).toString())}
-                          className="bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200"
-                        >
-                          50% Balance
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPoolInvestAmountUsd(currentUser.balance.toFixed(2))}
-                          className="bg-blue-50 px-3 py-2 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-100"
-                        >
-                          Max Cash (${currentUser.balance.toFixed(2)})
-                        </button>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={currentUser.balance <= 0 || currentUser.kycStatus !== 'verified'}
-                        className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
-                          currentUser.balance > 0 && currentUser.kycStatus === 'verified'
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20'
-                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        Start Hands-Free Trading
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: SELF TRADING DESK */}
+              {/* TAB 1: SELF TRADING DESK WITH POP-UP CONFIRMATION */}
               {customerTab === 'trade' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
@@ -1560,9 +1501,11 @@ export default function App() {
                         </div>
                       </div>
 
+                      {/* BUTTONS THAT TRIGGER THE CONFIRMATION POP-UP */}
                       <div className="flex items-center gap-3 pt-1">
                         <button
-                          onClick={() => { setTradeSide('BUY'); handleExecuteTrade(); }}
+                          type="button"
+                          onClick={() => handleInitiateOrder('BUY')}
                           disabled={currentUser.kycStatus !== 'verified' || currentUser.balance <= 0}
                           className={`flex-1 font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
                             currentUser.kycStatus === 'verified' && currentUser.balance > 0
@@ -1574,7 +1517,8 @@ export default function App() {
                           BUY / LONG ({calculatedLots} Lots)
                         </button>
                         <button
-                          onClick={() => { setTradeSide('SELL'); handleExecuteTrade(); }}
+                          type="button"
+                          onClick={() => handleInitiateOrder('SELL')}
                           disabled={currentUser.kycStatus !== 'verified' || currentUser.balance <= 0}
                           className={`flex-1 font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
                             currentUser.kycStatus === 'verified' && currentUser.balance > 0
@@ -1587,6 +1531,27 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
+                    {currentUser.kycStatus !== 'verified' && (
+                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Trading disabled: KYC approval required before placing orders.</span>
+                      </div>
+                    )}
+                    {currentUser.kycStatus === 'verified' && currentUser.balance <= 0 && (
+                      <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-blue-900 text-[11px] flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Wallet className="w-4 h-4 text-blue-600" />
+                          Wallet balance is $0.00. Add funds to activate trading.
+                        </span>
+                        <button
+                          onClick={() => setCustomerTab('deposit')}
+                          className="bg-blue-600 text-white font-bold px-3 py-1 rounded-lg text-[10px]"
+                        >
+                          Deposit Now
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
@@ -1611,6 +1576,190 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: MANAGED PAMM POOLS */}
+              {customerTab === 'managed' && (
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-r from-blue-900 via-blue-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div className="space-y-2 max-w-xl">
+                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">
+                        Automated Wealth Management
+                      </span>
+                      <h3 className="text-2xl font-black tracking-tight">CommoFx Master PAMM Strategies</h3>
+                      <p className="text-xs text-blue-200 leading-relaxed">
+                        Don't know trading? Our institutional desk executes the trades for you on a collective pool. Sit back and watch your daily proportional gains update automatically.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center text-xs font-mono">
+                      <span className="text-slate-300 block text-[10px]">Your Total Pool Assets</span>
+                      <strong className="text-2xl font-black text-amber-400">
+                        ${(currentUser.allocatedInPools || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {pammNotice && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{pammNotice}</span>
+                    </div>
+                  )}
+
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <h4 className="font-bold text-sm text-slate-900">Your Active Strategy Allocations</h4>
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 whitespace-nowrap">
+                          <tr>
+                            <th className="p-3">Holding ID</th>
+                            <th className="p-3">Strategy Fund</th>
+                            <th className="p-3">Capital Allocated</th>
+                            <th className="p-3">Current Value</th>
+                            <th className="p-3">Total Gains</th>
+                            <th className="p-3">Joined Date</th>
+                            <th className="p-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {currentUser.poolHoldings && currentUser.poolHoldings.length > 0 ? (
+                            currentUser.poolHoldings.map((h) => {
+                              const gain = h.currentValue - h.investedAmount;
+                              return (
+                                <tr key={h.id} className="hover:bg-slate-50">
+                                  <td className="p-3 text-slate-400">{h.id}</td>
+                                  <td className="p-3 font-bold text-slate-900 font-sans">{h.poolName}</td>
+                                  <td className="p-3 font-semibold text-slate-700">${h.investedAmount.toFixed(2)}</td>
+                                  <td className="p-3 font-black text-slate-900">${h.currentValue.toFixed(2)}</td>
+                                  <td className="p-3">
+                                    <span className="font-bold text-emerald-600">
+                                      +${gain.toFixed(2)} ({((gain / h.investedAmount) * 100).toFixed(2)}%)
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-slate-500">{h.joinedDate}</td>
+                                  <td className="p-3 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleExitManagedPool(h.id)}
+                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold transition"
+                                    >
+                                      Withdraw Capital & Profit
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">You have no active managed strategy allocations yet. Select a pool below to start earning hands-free.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {managedPools.map((pool) => (
+                      <div key={pool.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4 hover:border-blue-500 transition">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest font-mono">
+                              {pool.riskLevel}
+                            </span>
+                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-mono">
+                              {pool.historicalReturn}
+                            </span>
+                          </div>
+                          <h4 className="font-black text-slate-900 text-base">{pool.name}</h4>
+                          <p className="text-xs text-slate-500">{pool.focus}</p>
+
+                          <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs font-mono">
+                            <div className="flex justify-between text-slate-600">
+                              <span>Win Rate:</span>
+                              <strong className="text-slate-900">{pool.winRate}</strong>
+                            </div>
+                            <div className="flex justify-between text-slate-600">
+                              <span>Total Capital Managed:</span>
+                              <strong className="text-slate-900">${pool.totalAUM.toLocaleString()}</strong>
+                            </div>
+                            <div className="flex justify-between text-slate-600">
+                              <span>Min Deposit:</span>
+                              <strong className="text-slate-900">${pool.minDeposit} USD</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setSelectedPoolId(pool.id);
+                            setPoolInvestAmountUsd(Math.max(pool.minDeposit, Math.min(currentUser.balance, 500)).toString());
+                          }}
+                          className={`w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                            selectedPoolId === pool.id
+                              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {selectedPoolId === pool.id ? 'Selected' : 'Select Strategy'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <h4 className="font-bold text-sm text-slate-900">
+                      Allocate Funds to Selected Strategy ({managedPools.find((p) => p.id === selectedPoolId)?.name})
+                    </h4>
+
+                    <form onSubmit={handleJoinManagedPool} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end text-xs">
+                      <div>
+                        <label className="text-slate-600 block mb-1 font-semibold">
+                          Investment Amount (USD $)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-2.5 font-bold text-slate-400">$</span>
+                          <input
+                            type="number"
+                            required
+                            min="10"
+                            step="any"
+                            value={poolInvestAmountUsd}
+                            onChange={(e) => setPoolInvestAmountUsd(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-slate-900 font-bold focus:outline-none focus:border-blue-600 font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPoolInvestAmountUsd(Math.floor(currentUser.balance * 0.50).toString())}
+                          className="bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200"
+                        >
+                          50% Balance
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPoolInvestAmountUsd(currentUser.balance.toFixed(2))}
+                          className="bg-blue-50 px-3 py-2 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-100"
+                        >
+                          Max Cash (${currentUser.balance.toFixed(2)})
+                        </button>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={currentUser.balance <= 0 || currentUser.kycStatus !== 'verified'}
+                        className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
+                          currentUser.balance > 0 && currentUser.kycStatus === 'verified'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        Start Hands-Free Trading
+                      </button>
+                    </form>
                   </div>
                 </div>
               )}
@@ -1837,7 +1986,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 5: SELF TRADING PORTFOLIO */}
+              {/* TAB 5: SELF TRADING PORTFOLIO WITH LIVE VALUE */}
               {customerTab === 'portfolio' && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
@@ -2047,7 +2196,7 @@ export default function App() {
           )}
 
           {/* ======================================================== */}
-          {/* SUPER ADMIN: MASTER POOL TRADING, DEPOSITS, PAYOUTS     */}
+          {/* SUPER ADMIN: MASTER DESK, DEPOSITS, PAYOUTS, KYC         */}
           {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="space-y-6">
@@ -2091,301 +2240,4 @@ export default function App() {
                         placeholder="3.5"
                         value={distributeProfitPct}
                         onChange={(e) => setDistributeProfitPct(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-white font-mono font-bold text-sm"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider transition shadow-lg shadow-amber-500/20"
-                  >
-                    Distribute Profit to Pool
-                  </button>
-                </form>
-              </div>
-
-              {/* SECTION 2: INCOMING DEPOSITS */}
-              <div className="bg-white border border-blue-300 rounded-3xl shadow-xl p-8 space-y-4">
-                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
-                  <div>
-                    <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
-                      Gateway Deposit Queue
-                    </span>
-                    <h2 className="text-xl font-black text-slate-900 mt-1">Pending Client Deposit Requests</h2>
-                    <p className="text-xs text-slate-500">
-                      Verify transaction reference and choose Accept to credit balance or Reject to decline[cite: 14].
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
-                    {depositRequests.filter((r) => r.status === 'pending').length} Pending
-                  </span>
-                </div>
-
-                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                      <tr>
-                        <th className="p-3.5">Request ID</th>
-                        <th className="p-3.5">Client</th>
-                        <th className="p-3.5">Gateway & Ref</th>
-                        <th className="p-3.5">INR Deposited</th>
-                        <th className="p-3.5">USD To Credit</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-right">Decision Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {depositRequests.length > 0 ? (
-                        depositRequests.map((req) => (
-                          <tr key={req.id} className="hover:bg-slate-50">
-                            <td className="p-3.5 text-slate-400">{req.id}</td>
-                            <td className="p-3.5 font-bold text-slate-900 font-sans">
-                              {req.userName}
-                              <span className="text-[10px] text-slate-400 font-mono block">{req.userEmail}</span>
-                            </td>
-                            <td className="p-3.5">
-                              <span className="font-bold text-slate-800 block">{req.gateway}</span>
-                              <span className="text-[10px] text-blue-600 block">Ref: {req.txRef}</span>
-                            </td>
-                            <td className="p-3.5 font-bold text-slate-800">
-                              ₹{(req.amountInr || req.amount * USD_INR_RATE).toLocaleString('en-IN')}
-                            </td>
-                            <td className="p-3.5 font-black text-emerald-600 text-sm">
-                              ${(req.amountUsd || req.amount).toLocaleString()} USD
-                            </td>
-                            <td className="p-3.5">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                req.status === 'accepted' || req.status === 'approved'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : req.status === 'rejected'
-                                  ? 'bg-rose-50 text-rose-700'
-                                  : 'bg-amber-50 text-amber-700'
-                              }`}>
-                                {req.status}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right space-x-2">
-                              {req.status === 'pending' ? (
-                                <>
-                                  <button
-                                    onClick={() => handleAdminApproveDeposit(req.id)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
-                                  >
-                                    Accept (Credit)
-                                  </button>
-                                  <button
-                                    onClick={() => handleAdminRejectDeposit(req.id)}
-                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
-                                  >
-                                    Reject
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-slate-400 text-[10px] italic">Completed</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No deposit requests submitted yet.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* SECTION 3: WITHDRAWAL PAYOUT QUEUE */}
-              <div className="bg-white border border-emerald-300 rounded-3xl shadow-xl p-8 space-y-4">
-                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
-                  <div>
-                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
-                      Payout & Disbursal Queue
-                    </span>
-                    <h2 className="text-xl font-black text-slate-900 mt-1">Client Withdrawal Requests</h2>
-                    <p className="text-xs text-slate-500">
-                      Transfer funds to investor's bank/UPI and approve payout to complete transaction.
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl">
-                    {withdrawalRequests.filter((w) => w.status === 'pending').length} Pending Payouts
-                  </span>
-                </div>
-
-                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                      <tr>
-                        <th className="p-3.5">Withdrawal ID</th>
-                        <th className="p-3.5">Client</th>
-                        <th className="p-3.5">Destination & Beneficiary</th>
-                        <th className="p-3.5">USD Payout</th>
-                        <th className="p-3.5">INR Disbursal</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-right">Disbursal Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {withdrawalRequests.length > 0 ? (
-                        withdrawalRequests.map((wth) => (
-                          <tr key={wth.id} className="hover:bg-slate-50">
-                            <td className="p-3.5 text-slate-400">{wth.id}</td>
-                            <td className="p-3.5 font-bold text-slate-900 font-sans">
-                              {wth.userName}
-                              <span className="text-[10px] text-slate-400 font-mono block">{wth.userEmail}</span>
-                            </td>
-                            <td className="p-3.5">
-                              <span className="font-bold text-slate-800 block">{wth.method}</span>
-                              <span className="text-[10px] text-slate-600 block break-all font-sans">{wth.beneficiary}</span>
-                            </td>
-                            <td className="p-3.5 font-black text-slate-900 text-sm">
-                              ${wth.amountUsd.toFixed(2)} USD
-                            </td>
-                            <td className="p-3.5 font-bold text-emerald-700">
-                              ₹{wth.amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-3.5">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                wth.status === 'completed'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : wth.status === 'rejected'
-                                  ? 'bg-rose-50 text-rose-700'
-                                  : 'bg-amber-50 text-amber-700'
-                              }`}>
-                                {wth.status}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right space-x-2">
-                              {wth.status === 'pending' ? (
-                                <>
-                                  <button
-                                    onClick={() => handleAdminApproveWithdrawal(wth.id)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
-                                  >
-                                    Approve & Mark Paid
-                                  </button>
-                                  <button
-                                    onClick={() => handleAdminRejectWithdrawal(wth.id)}
-                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
-                                  >
-                                    Reject (Refund)
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-slate-400 text-[10px] italic">Processed</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No withdrawal requests placed yet.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* SECTION 4: MASTER KYC CLEARANCE & BALANCES */}
-              <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
-                <div className="flex justify-between items-start border-b border-slate-200 pb-4">
-                  <div>
-                    <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
-                      Super Admin Root Terminal
-                    </span>
-                    <h2 className="text-2xl font-black text-slate-900 mt-1">Master KYC Clearance & Client Accounts</h2>
-                    <p className="text-xs text-slate-500">Approve client documents to unlock trading or manually adjust balances.</p>
-                  </div>
-                  <div className="bg-purple-50 text-purple-800 px-3 py-1.5 rounded-lg border border-purple-200 text-xs font-semibold flex items-center gap-1.5">
-                    <Shield className="w-4 h-4" /> Root Clearance
-                  </div>
-                </div>
-
-                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead className="bg-white text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="p-3.5">Client</th>
-                        <th className="p-3.5">Email</th>
-                        <th className="p-3.5">Document Details</th>
-                        <th className="p-3.5">Cash Balance</th>
-                        <th className="p-3.5">Pool Investments</th>
-                        <th className="p-3.5">KYC Status</th>
-                        <th className="p-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {usersDb.length > 0 ? (
-                        usersDb.map((u) => (
-                          <tr key={u.id} className="hover:bg-slate-50">
-                            <td className="p-3.5 font-bold text-slate-900 font-sans">{u.name}</td>
-                            <td className="p-3.5 text-slate-600">{u.email}</td>
-                            <td className="p-3.5">
-                              <span className="font-bold text-slate-800 block">{u.kycDocument?.type || 'No Document'}</span>
-                              <span className="text-[10px] text-slate-500 font-mono block">Doc: {u.kycDocument?.number || 'N/A'}</span>
-                              <span className="text-[10px] text-blue-600 font-mono block flex items-center gap-1">
-                                <FileText className="w-3 h-3" /> {u.kycDocument?.filename || 'proof.pdf'}
-                              </span>
-                            </td>
-                            <td className="p-3.5 font-bold text-slate-900">${u.balance.toLocaleString()}</td>
-                            <td className="p-3.5 font-bold text-blue-600">${(u.allocatedInPools || 0).toLocaleString()}</td>
-                            <td className="p-3.5">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                u.kycStatus === 'verified'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
-                              }`}>
-                                {u.kycStatus}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right space-x-2">
-                              <button
-                                onClick={() => handleAdminToggleKyc(u.id, u.kycStatus)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold text-white transition ${
-                                  u.kycStatus === 'verified'
-                                    ? 'bg-amber-600 hover:bg-amber-700'
-                                    : 'bg-emerald-600 hover:bg-emerald-700'
-                                }`}
-                              >
-                                {u.kycStatus === 'verified' ? 'Revoke KYC (Lock)' : 'Approve KYC (Unlock)'}
-                              </button>
-                              <button
-                                onClick={() => handleAdminModifyBalance(u.id)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
-                              >
-                                Edit Balance
-                              </button>
-                              <button
-                                onClick={() => handleAdminDeleteUser(u.id)}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200"
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No client records registered yet.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* FOOTER */}
-      <footer className="bg-white border-t border-slate-200 mt-auto py-6">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <strong className="text-slate-800 font-bold">COMMOFX</strong> — COMMO FOREX
-          </div>
-          <div className="text-center sm:text-right text-[11px] text-slate-400">
-            24-Hour Interbank Liquidity & Commodities Infrastructure
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
+                        className="w-full bg-
