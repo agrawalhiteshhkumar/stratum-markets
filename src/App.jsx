@@ -10,7 +10,7 @@ import {
   TrendingDown, Check, ArrowRight, DollarSign, Building,
   PieChart, HelpCircle, Compass, Target, Zap, Download,
   UploadCloud, AlertTriangle, FileText, CreditCard, CheckCircle,
-  IndianRupee, ArrowLeftRight
+  IndianRupee, ArrowLeftRight, Landmark
 } from 'lucide-react';
 
 // Live Pegged Exchange Rate (1 USD = 90 INR)
@@ -73,6 +73,16 @@ export default function App() {
     }
   });
 
+  // Global Withdrawal Requests Queue
+  const [withdrawalRequests, setWithdrawalRequests] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cfx_withdrawal_requests');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
     localStorage.setItem('cfx_registered_users', JSON.stringify(usersDb));
   }, [usersDb]);
@@ -80,6 +90,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cfx_deposit_requests', JSON.stringify(depositRequests));
   }, [depositRequests]);
+
+  useEffect(() => {
+    localStorage.setItem('cfx_withdrawal_requests', JSON.stringify(withdrawalRequests));
+  }, [withdrawalRequests]);
 
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -94,26 +108,42 @@ export default function App() {
   const [regDocNumber, setRegDocNumber] = useState('');
   const [regFileName, setRegFileName] = useState('');
 
-  // Client Deposit Request Inputs (INR & USD Dual State)
+  // Client Deposit Inputs (INR & USD)
   const [depositInr, setDepositInr] = useState('90000');
   const [paymentGateway, setPaymentGateway] = useState('UPI / Instant Transfer (BHIM, GPay, PhonePe)');
   const [txRefNumber, setTxRefNumber] = useState('');
   const [depositNotice, setDepositNotice] = useState('');
 
-  // Converted USD based on INR input
+  // Client Withdrawal Request Inputs
+  const [withdrawAmountUsd, setWithdrawAmountUsd] = useState('');
+  const [withdrawMethod, setWithdrawMethod] = useState('UPI Transfer (Instant INR)');
+  const [withdrawBeneficiaryDetails, setWithdrawBeneficiaryDetails] = useState('');
+  const [withdrawNotice, setWithdrawNotice] = useState('');
+
+  // Market & Trading State
+  const [assets, setAssets] = useState(COMMOFX_ASSETS);
+  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
+  
+  // Custom margin-based trade allocation
+  const [allocatedMarginUsd, setAllocatedMarginUsd] = useState('100');
+  const [tradeLeverage, setTradeLeverage] = useState(10);
+  const [tradeSide, setTradeSide] = useState('BUY');
+
+  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'deposit' | 'withdraw' | 'portfolio' | 'wallet'
+
+  // Converted USD based on INR deposit input
   const convertedUsd = useMemo(() => {
     const val = parseFloat(depositInr) || 0;
     return (val / USD_INR_RATE).toFixed(2);
   }, [depositInr]);
 
-  // Market & Trading State
-  const [assets, setAssets] = useState(COMMOFX_ASSETS);
-  const [selectedAsset, setSelectedAsset] = useState(COMMOFX_ASSETS[6]);
-  const [tradeUnits, setTradeUnits] = useState(1.0);
-  const [tradeLeverage, setTradeLeverage] = useState(10);
-  const [tradeSide, setTradeSide] = useState('BUY');
-
-  const [customerTab, setCustomerTab] = useState('trade'); // 'trade' | 'deposit' | 'portfolio' | 'wallet'
+  // Exact Fractional Lot Calculation down to 6 decimals based on dollar allocation
+  const calculatedLots = useMemo(() => {
+    const margin = parseFloat(allocatedMarginUsd) || 0;
+    if (margin <= 0 || !selectedAsset.price) return '0.000000';
+    const units = (margin * tradeLeverage) / selectedAsset.price;
+    return units.toFixed(6);
+  }, [allocatedMarginUsd, tradeLeverage, selectedAsset.price]);
 
   // PWA Prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -163,7 +193,11 @@ export default function App() {
     if (currentUser && currentUser.role === 'customer') {
       const updated = usersDb.find((u) => u.id === currentUser.id);
       if (updated) {
-        if (updated.balance !== currentUser.balance || updated.kycStatus !== currentUser.kycStatus || updated.ledger?.length !== currentUser.ledger?.length) {
+        if (
+          updated.balance !== currentUser.balance ||
+          updated.kycStatus !== currentUser.kycStatus ||
+          updated.ledger?.length !== currentUser.ledger?.length
+        ) {
           setCurrentUser(updated);
         }
       }
@@ -266,7 +300,7 @@ export default function App() {
     setRegFileName('');
   };
 
-  // Client Submits Fund Request (Stores Both INR and USD)
+  // Client Submits Fund Request
   const handleDepositSubmit = (e) => {
     e.preventDefault();
     setDepositNotice('');
@@ -320,7 +354,68 @@ export default function App() {
     setDepositNotice(`Deposit request of ₹${inrVal.toLocaleString('en-IN')} (Crediting $${usdVal.toLocaleString()} USD) submitted. Awaiting Super Admin approval.`);
   };
 
-  // Admin ACCEPTS Deposit Request
+  // Client Submits Withdrawal Request
+  const handleWithdrawalSubmit = (e) => {
+    e.preventDefault();
+    setWithdrawNotice('');
+
+    const requestedAmount = parseFloat(withdrawAmountUsd);
+    if (isNaN(requestedAmount) || requestedAmount <= 0) {
+      alert('Please enter a valid withdrawal amount.');
+      return;
+    }
+
+    if (requestedAmount > currentUser.balance) {
+      alert(`Insufficient funds. You can withdraw up to $${currentUser.balance.toFixed(2)} USD.`);
+      return;
+    }
+
+    if (!withdrawBeneficiaryDetails.trim()) {
+      alert('Please provide your beneficiary payout details (UPI ID or Bank Account Details).');
+      return;
+    }
+
+    const newWithdrawal = {
+      id: `WTH-${Math.floor(10000 + Math.random() * 90000)}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      amountUsd: requestedAmount,
+      amountInr: requestedAmount * USD_INR_RATE,
+      method: withdrawMethod,
+      beneficiary: withdrawBeneficiaryDetails.trim(),
+      date: new Date().toISOString().split('T')[0],
+      status: 'pending'
+    };
+
+    setWithdrawalRequests([newWithdrawal, ...withdrawalRequests]);
+
+    // Place funds on hold by debiting the balance immediately
+    const updatedUser = {
+      ...currentUser,
+      balance: currentUser.balance - requestedAmount,
+      ledger: [
+        {
+          id: newWithdrawal.id,
+          date: newWithdrawal.date,
+          type: 'Withdrawal Request',
+          method: `${withdrawMethod} (${withdrawBeneficiaryDetails.trim()})`,
+          amount: -requestedAmount,
+          status: 'Pending Admin Payout'
+        },
+        ...(currentUser.ledger || [])
+      ]
+    };
+
+    setCurrentUser(updatedUser);
+    setUsersDb(usersDb.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+
+    setWithdrawAmountUsd('');
+    setWithdrawBeneficiaryDetails('');
+    setWithdrawNotice(`Withdrawal request for $${requestedAmount.toLocaleString()} USD (₹${(requestedAmount * USD_INR_RATE).toLocaleString('en-IN')} INR) submitted for processing.`);
+  };
+
+  // Super Admin APPROVES Deposit Request
   const handleAdminApproveDeposit = (requestId) => {
     const targetReq = depositRequests.find((r) => r.id === requestId);
     if (!targetReq) return;
@@ -346,7 +441,7 @@ export default function App() {
     );
   };
 
-  // Admin REJECTS Deposit Request
+  // Super Admin REJECTS Deposit Request
   const handleAdminRejectDeposit = (requestId) => {
     const reason = prompt('Enter rejection reason (optional):');
     if (reason === null) return;
@@ -371,7 +466,58 @@ export default function App() {
     );
   };
 
-  // Trade Execution
+  // Super Admin APPROVES Withdrawal Request
+  const handleAdminApproveWithdrawal = (withdrawalId) => {
+    const target = withdrawalRequests.find((w) => w.id === withdrawalId);
+    if (!target) return;
+
+    setUsersDb((prev) =>
+      prev.map((u) => {
+        if (u.id === target.userId) {
+          const updatedLedger = (u.ledger || []).map((l) =>
+            l.id === target.id ? { ...l, status: 'Processed & Transferred' } : l
+          );
+          return { ...u, ledger: updatedLedger };
+        }
+        return u;
+      })
+    );
+
+    setWithdrawalRequests((prev) =>
+      prev.map((w) => (w.id === withdrawalId ? { ...w, status: 'completed' } : w))
+    );
+  };
+
+  // Super Admin REJECTS Withdrawal Request (Re-credits the held funds)
+  const handleAdminRejectWithdrawal = (withdrawalId) => {
+    const reason = prompt('Enter rejection reason:');
+    if (reason === null) return;
+
+    const target = withdrawalRequests.find((w) => w.id === withdrawalId);
+    if (!target) return;
+
+    setUsersDb((prev) =>
+      prev.map((u) => {
+        if (u.id === target.userId) {
+          const updatedLedger = (u.ledger || []).map((l) =>
+            l.id === target.id ? { ...l, status: `Rejected & Refunded (${reason || 'Invalid Details'})` } : l
+          );
+          return {
+            ...u,
+            balance: u.balance + target.amountUsd, // Refund balance
+            ledger: updatedLedger
+          };
+        }
+        return u;
+      })
+    );
+
+    setWithdrawalRequests((prev) =>
+      prev.map((w) => (w.id === withdrawalId ? { ...w, status: 'rejected' } : w))
+    );
+  };
+
+  // Fractional Trade Execution based on dollar margin input
   const handleExecuteTrade = () => {
     if (!currentUser || currentUser.role !== 'customer') return;
 
@@ -380,29 +526,32 @@ export default function App() {
       return;
     }
 
-    if (currentUser.balance <= 0) {
-      alert('Insufficient Wallet Balance: Your current balance is $0.00. Please deposit funds through the payment gateway to start trading.');
+    const marginToSpend = parseFloat(allocatedMarginUsd) || 0;
+    if (marginToSpend <= 0) {
+      alert('Please specify an investment amount greater than $0.00.');
       return;
     }
 
-    const reqMargin = (selectedAsset.price * tradeUnits) / tradeLeverage;
-    if (reqMargin > currentUser.balance) {
-      alert(`Insufficient margin: Required $${reqMargin.toFixed(2)}, Available $${currentUser.balance.toFixed(2)}. Please add funds.`);
+    if (marginToSpend > currentUser.balance) {
+      alert(`Insufficient wallet balance. You have $${currentUser.balance.toFixed(2)} USD available.`);
       return;
     }
+
+    const fractionalUnits = parseFloat(calculatedLots);
 
     const newTx = {
       id: `TX-${Math.floor(10000 + Math.random() * 90000)}`,
       symbol: selectedAsset.symbol,
       side: tradeSide,
-      units: Number(tradeUnits),
+      marginAllocated: marginToSpend,
+      units: fractionalUnits,
       leverage: Number(tradeLeverage),
       entryPrice: selectedAsset.price
     };
 
     const updated = {
       ...currentUser,
-      balance: currentUser.balance - 2.0,
+      balance: currentUser.balance - marginToSpend, // Dedicate margin to position
       trades: [newTx, ...(currentUser.trades || [])]
     };
 
@@ -410,19 +559,39 @@ export default function App() {
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
+  // Closing Trade (Realizes P&L and returns margin)
   const handleCloseTrade = (tradeId) => {
     if (!currentUser || currentUser.role !== 'customer') return;
+    const targetTrade = currentUser.trades.find((t) => t.id === tradeId);
+    if (!targetTrade) return;
+
+    // Simulated PnL (+3.5% gain returned to balance)
+    const simulatedPnL = targetTrade.marginAllocated * 0.035;
+    const returnedEquity = targetTrade.marginAllocated + simulatedPnL;
+
     const filtered = currentUser.trades.filter((t) => t.id !== tradeId);
     const updated = {
       ...currentUser,
-      balance: currentUser.balance + 25.00,
-      trades: filtered
+      balance: currentUser.balance + returnedEquity,
+      trades: filtered,
+      ledger: [
+        {
+          id: `CL-${Math.floor(1000 + Math.random() * 9000)}`,
+          date: new Date().toISOString().split('T')[0],
+          type: 'Close Trade & Realize Profit',
+          method: `${targetTrade.symbol} (${targetTrade.side} ${targetTrade.units} Lots)`,
+          amount: returnedEquity,
+          status: 'Returned to Balance'
+        },
+        ...(currentUser.ledger || [])
+      ]
     };
+
     setCurrentUser(updated);
     setUsersDb((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // Administrative Actions
+  // Administrative User Modifications
   const handleAdminModifyBalance = (userId) => {
     const val = prompt('Enter new balance for client (USD):');
     if (!val || isNaN(val)) return;
@@ -586,58 +755,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* ASSETS */}
-          <section className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6">
-            <div className="text-center space-y-1">
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Market Coverage</span>
-              <h2 className="text-2xl font-black text-slate-900">Invest In Leading Global Assets</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-xs">Currencies (Forex)</h3>
-                  <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">7 Majors</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
-                  {['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'].map((c) => (
-                    <span key={c} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-xs">Commodities</h3>
-                  <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded">Metals & Energy</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
-                  {['Spot Gold (XAU)', 'Silver (XAG)', 'Crude Oil (WTI)', 'Natural Gas'].map((cm) => (
-                    <span key={cm} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
-                      {cm}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-slate-900 text-xs">Major Indices</h3>
-                  <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded">Equities</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
-                  {['Dow Jones 30', 'Nasdaq 100'].map((ind) => (
-                    <span key={ind} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg font-semibold text-slate-800">
-                      {ind}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
           {/* 4 CORE TRUST BADGES */}
           <section className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="bg-slate-900 text-white rounded-3xl p-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
@@ -646,12 +763,12 @@ export default function App() {
                 <span className="text-xs text-slate-300">Continuous Market Liquidity</span>
               </div>
               <div>
-                <span className="text-xl font-black text-blue-400 block">Zero</span>
-                <span className="text-xs text-slate-300">No Forced Liquidation</span>
+                <span className="text-xl font-black text-blue-400 block">Fractional Lots</span>
+                <span className="text-xs text-slate-300">Buy with any deposit size</span>
               </div>
               <div>
-                <span className="text-xl font-black text-emerald-400 block">On-Time</span>
-                <span className="text-xs text-slate-300">Reliable Client Withdrawals</span>
+                <span className="text-xl font-black text-emerald-400 block">Instant INR/USD</span>
+                <span className="text-xs text-slate-300">Fast Gateway Withdrawals</span>
               </div>
               <div>
                 <span className="text-xl font-black text-amber-400 block">Client First</span>
@@ -720,7 +837,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. CLIENT REGISTRATION WITH KYC UPLOAD */}
+      {/* 3. REGISTRATION */}
       {activeView === 'register' && (
         <div className="flex-1 flex items-center justify-center p-4 py-12">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg p-8 shadow-2xl space-y-6">
@@ -830,7 +947,6 @@ export default function App() {
                       <span className="text-[11px] font-bold text-slate-700">
                         {regFileName ? regFileName : 'Click to select file (PDF, PNG, JPG)'}
                       </span>
-                      <span className="text-[10px] text-slate-400">Max size: 10MB</span>
                     </div>
                   </div>
                 </div>
@@ -861,12 +977,10 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. WORKSPACES: CUSTOMER, SUB-ADMIN, ADMIN */}
+      {/* 4. WORKSPACES */}
       {activeView === 'portal' && currentUser && (
         <div className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-          {/* ======================================================== */}
-          {/* CUSTOMER WORKSPACE                                       */}
-          {/* ======================================================== */}
+          {/* CUSTOMER WORKSPACE */}
           {currentUser.role === 'customer' && (
             <div className="space-y-6">
               {/* Account Header with Status Banner */}
@@ -888,53 +1002,39 @@ export default function App() {
 
                 <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-xs">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Wallet Equity (USD)</span>
+                    <span className="text-slate-500 block text-[10px]">Available Cash (USD)</span>
                     <strong className="text-xl text-slate-900">${currentUser.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                     <span className="text-[10px] text-slate-400 block font-sans">
                       ≈ ₹{(currentUser.balance * USD_INR_RATE).toLocaleString('en-IN', { minimumFractionDigits: 2 })} INR
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Managed Pools</span>
-                    <strong className="text-xl text-blue-600">${currentUser.allocatedInPools.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    <span className="text-slate-500 block text-[10px]">Open Positions</span>
+                    <strong className="text-xl text-blue-600">{currentUser.trades ? currentUser.trades.length : 0}</strong>
                   </div>
                 </div>
               </div>
 
-              {/* KYC LOCKED ALERT BANNER */}
-              {currentUser.kycStatus !== 'verified' && (
-                <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-l-4 border-amber-500 bg-white p-4 rounded-xl shadow-sm flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-xs text-slate-900">
-                      Trading Disabled: KYC Document Pending Verification
-                    </h4>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Your document (<strong>{currentUser.kycDocument?.type}</strong>: {currentUser.kycDocument?.number}) is currently under review by compliance. Buy & Sell orders will unlock once approved.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Navigation Tabs */}
-              <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
+              <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-bold text-slate-600 overflow-x-auto">
                 {[
-                  { id: 'trade', label: 'Trading Desk' },
-                  { id: 'deposit', label: 'Deposit / Add Funds' },
+                  { id: 'trade', label: 'Trading Desk (Fractional Lots)' },
+                  { id: 'deposit', label: 'Deposit (INR / USD)' },
+                  { id: 'withdraw', label: 'Withdraw Funds' },
                   { id: 'portfolio', label: `My Contracts (${currentUser.trades ? currentUser.trades.length : 0})` },
                   { id: 'wallet', label: 'Personal Ledger' }
                 ].map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setCustomerTab(t.id)}
-                    className={`px-4 py-2 rounded-lg transition ${customerTab === t.id ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700'}`}
+                    className={`px-4 py-2 rounded-lg whitespace-nowrap transition ${customerTab === t.id ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700'}`}
                   >
                     {t.label}
                   </button>
                 ))}
               </div>
 
-              {/* TAB 1: TRADING DESK */}
+              {/* TAB 1: TRADING DESK WITH FRACTIONAL LOT SUPPORT */}
               {customerTab === 'trade' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
@@ -974,56 +1074,104 @@ export default function App() {
                       </svg>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                      <div>
-                        <label className="text-[11px] text-slate-500 font-semibold block mb-1">Contract Units</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={tradeUnits}
-                          onChange={(e) => setTradeUnits(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-xs"
-                        />
+                    {/* FRACTIONAL TRADE ORDER FORM */}
+                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-800">Order Allocation</span>
+                        <div className="space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setAllocatedMarginUsd(Math.floor(currentUser.balance * 0.25).toString())}
+                            className="bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px] font-semibold text-slate-600 hover:text-blue-600"
+                          >
+                            25%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllocatedMarginUsd(Math.floor(currentUser.balance * 0.50).toString())}
+                            className="bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px] font-semibold text-slate-600 hover:text-blue-600"
+                          >
+                            50%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllocatedMarginUsd(currentUser.balance.toFixed(2))}
+                            className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
+                          >
+                            Max (All In)
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-[11px] text-slate-500 font-semibold block mb-1">Leverage</label>
-                        <select
-                          value={tradeLeverage}
-                          onChange={(e) => setTradeLeverage(Number(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-xs"
-                        >
-                          <option value="1">1x Cash Spot</option>
-                          <option value="10">10x Dynamic</option>
-                          <option value="25">25x High</option>
-                          <option value="50">50x Prime</option>
-                        </select>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[11px] text-slate-600 font-semibold block mb-1">
+                            Amount to Invest (USD $)
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 font-bold text-slate-400">$</span>
+                            <input
+                              type="number"
+                              step="any"
+                              min="1"
+                              placeholder="100"
+                              value={allocatedMarginUsd}
+                              onChange={(e) => setAllocatedMarginUsd(e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-lg pl-7 pr-3 py-1.5 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] text-slate-600 font-semibold block mb-1">Leverage Ratio</label>
+                          <select
+                            value={tradeLeverage}
+                            onChange={(e) => setTradeLeverage(Number(e.target.value))}
+                            className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-mono text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                          >
+                            <option value="1">1x Cash Spot</option>
+                            <option value="10">10x Dynamic</option>
+                            <option value="25">25x High</option>
+                            <option value="50">50x Prime</option>
+                          </select>
+                        </div>
+
+                        {/* Computed Lots Callout */}
+                        <div>
+                          <label className="text-[11px] text-slate-600 font-semibold block mb-1">
+                            Computed Lots (Fractional)
+                          </label>
+                          <div className="bg-white border border-slate-300 rounded-lg p-1.5 font-mono text-xs font-bold text-blue-700">
+                            {calculatedLots} Lots
+                          </div>
+                        </div>
                       </div>
 
                       {/* EXECUTION BUTTONS */}
-                      <div className="flex items-end gap-2">
+                      <div className="flex items-center gap-3 pt-1">
                         <button
                           onClick={() => { setTradeSide('BUY'); handleExecuteTrade(); }}
                           disabled={currentUser.kycStatus !== 'verified' || currentUser.balance <= 0}
-                          className={`flex-1 font-bold py-2 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
+                          className={`flex-1 font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
                             currentUser.kycStatus === 'verified' && currentUser.balance > 0
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                           }`}
                         >
-                          {(currentUser.kycStatus !== 'verified' || currentUser.balance <= 0) && <Lock className="w-3 h-3" />}
-                          BUY
+                          {(currentUser.kycStatus !== 'verified' || currentUser.balance <= 0) && <Lock className="w-3.5 h-3.5" />}
+                          BUY / LONG ({calculatedLots} Lots)
                         </button>
                         <button
                           onClick={() => { setTradeSide('SELL'); handleExecuteTrade(); }}
                           disabled={currentUser.kycStatus !== 'verified' || currentUser.balance <= 0}
-                          className={`flex-1 font-bold py-2 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
+                          className={`flex-1 font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1 ${
                             currentUser.kycStatus === 'verified' && currentUser.balance > 0
                               ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'
                               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                           }`}
                         >
-                          {(currentUser.kycStatus !== 'verified' || currentUser.balance <= 0) && <Lock className="w-3 h-3" />}
-                          SELL
+                          {(currentUser.kycStatus !== 'verified' || currentUser.balance <= 0) && <Lock className="w-3.5 h-3.5" />}
+                          SELL / SHORT ({calculatedLots} Lots)
                         </button>
                       </div>
                     </div>
@@ -1077,7 +1225,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 2: DEPOSIT IN INR WITH REAL-TIME USD REFLECTION */}
+              {/* TAB 2: DEPOSIT IN INR & REAL-TIME USD REFLECTION */}
               {customerTab === 'deposit' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
@@ -1109,7 +1257,6 @@ export default function App() {
                         </select>
                       </div>
 
-                      {/* DUAL INR INPUT & USD REFLECTION BOX */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                         <div>
                           <label className="text-slate-700 block mb-1 font-bold flex items-center gap-1">
@@ -1164,7 +1311,6 @@ export default function App() {
                     </form>
                   </div>
 
-                  {/* GATEWAY DETAILS BOX */}
                   <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">Gateway Information</span>
@@ -1195,7 +1341,135 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 3: PORTFOLIO */}
+              {/* TAB 3: DEDICATED WITHDRAWAL REQUEST PORTAL */}
+              {customerTab === 'withdraw' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Withdraw Realized Funds</h3>
+                      <p className="text-xs text-slate-500">
+                        Transfer your closed trading profits directly to your bank account, UPI, or crypto wallet.
+                      </p>
+                    </div>
+
+                    {withdrawNotice && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>{withdrawNotice}</span>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleWithdrawalSubmit} className="space-y-4 text-xs">
+                      <div>
+                        <label className="text-slate-600 block mb-1 font-semibold">Payout Destination</label>
+                        <select
+                          value={withdrawMethod}
+                          onChange={(e) => setWithdrawMethod(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:border-blue-600 font-semibold text-xs"
+                        >
+                          <option value="UPI Transfer (Instant INR)">UPI Transfer (Instant INR via GPay, PhonePe, Paytm)</option>
+                          <option value="National Bank Wire (NEFT/IMPS)">Bank Wire (NEFT / IMPS / RTGS)</option>
+                          <option value="Crypto USDT (TRC-20)">Crypto Wallet Payout — USDT (TRC-20)</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-slate-700 font-bold">Amount to Withdraw (USD $)</label>
+                            <button
+                              type="button"
+                              onClick={() => setWithdrawAmountUsd(currentUser.balance.toFixed(2))}
+                              className="text-[10px] text-blue-600 font-bold hover:underline"
+                            >
+                              Max ($ {currentUser.balance.toFixed(2)})
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 font-bold text-slate-400">$</span>
+                            <input
+                              type="number"
+                              required
+                              step="any"
+                              min="10"
+                              placeholder="500"
+                              value={withdrawAmountUsd}
+                              onChange={(e) => setWithdrawAmountUsd(e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-xl pl-7 pr-3 py-2 text-slate-900 font-bold focus:outline-none focus:border-blue-600 text-sm font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-slate-700 block mb-1 font-bold text-emerald-700">
+                            Estimated Payout (INR ₹)
+                          </label>
+                          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl px-3.5 py-2 text-slate-900 font-mono flex items-center justify-between">
+                            <span className="text-sm font-black text-emerald-700">
+                              ₹{((parseFloat(withdrawAmountUsd) || 0) * USD_INR_RATE).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-[10px] text-slate-400">Rate: ₹{USD_INR_RATE}/$</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-slate-600 block mb-1 font-semibold">
+                          Beneficiary Details (UPI VPA / Bank Account & IFSC / USDT Address)
+                        </label>
+                        <textarea
+                          required
+                          rows="3"
+                          placeholder="e.g. UPI ID: username@oksbi OR Bank A/C: 123456789, IFSC: SBIN0001234, Name: Johnathan Smith"
+                          value={withdrawBeneficiaryDetails}
+                          onChange={(e) => setWithdrawBeneficiaryDetails(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-blue-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={currentUser.balance <= 0}
+                        className={`w-full py-3 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition shadow-lg ${
+                          currentUser.balance > 0
+                            ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                            : 'bg-slate-300 cursor-not-allowed text-slate-500'
+                        }`}
+                      >
+                        Request Payout
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4">
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest font-mono">Payout Governance</span>
+                      <h4 className="text-lg font-black text-slate-900 mt-1">Withdrawal Policy</h4>
+                      
+                      <div className="space-y-3 mt-4 text-xs text-slate-600">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <span><strong>Zero Withdrawal Fees:</strong> Direct 1:1 conversion at standard benchmark rates.</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <span><strong>Fast Disbursal:</strong> UPI transfers completed within 15–30 minutes of admin approval.</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <span><strong>Automatic Balance Hold:</strong> Requested amount is held from wallet during verification to protect your margins.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 font-mono">
+                      Available Balance: <strong>${currentUser.balance.toFixed(2)} USD</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: PORTFOLIO */}
               {customerTab === 'portfolio' && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
                   <h3 className="text-base font-bold text-slate-900">Your Open Position Contracts</h3>
@@ -1206,7 +1480,8 @@ export default function App() {
                           <th className="p-3">Trade ID</th>
                           <th className="p-3">Asset</th>
                           <th className="p-3">Side</th>
-                          <th className="p-3">Units</th>
+                          <th className="p-3">Margin ($)</th>
+                          <th className="p-3">Fractional Units</th>
                           <th className="p-3">Entry Price</th>
                           <th className="p-3 text-right">Action</th>
                         </tr>
@@ -1217,21 +1492,24 @@ export default function App() {
                             <tr key={t.id}>
                               <td className="p-3 text-slate-400">{t.id}</td>
                               <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
-                              <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>{t.side} {t.leverage}x</td>
-                              <td className="p-3">{t.units}</td>
+                              <td className={`p-3 font-bold ${t.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {t.side} {t.leverage}x
+                              </td>
+                              <td className="p-3 font-bold text-slate-800">${(t.marginAllocated || 0).toFixed(2)}</td>
+                              <td className="p-3 text-blue-700">{t.units}</td>
                               <td className="p-3">{t.entryPrice}</td>
                               <td className="p-3 text-right">
                                 <button
                                   onClick={() => handleCloseTrade(t.id)}
-                                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold"
+                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded text-xs font-bold"
                                 >
-                                  Close Trade
+                                  Close Trade & Realize Profit
                                 </button>
                               </td>
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="6" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
+                          <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No open trades.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1239,10 +1517,10 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 4: WALLET & DEPOSIT LEDGER */}
+              {/* TAB 5: WALLET & DEPOSIT LEDGER */}
               {customerTab === 'wallet' && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-base font-bold text-slate-900">Your Ledger History</h3>
+                  <h3 className="text-base font-bold text-slate-900">Your Complete Ledger History</h3>
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <table className="w-full text-left text-xs font-mono">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
@@ -1250,7 +1528,7 @@ export default function App() {
                           <th className="p-3">Reference</th>
                           <th className="p-3">Date</th>
                           <th className="p-3">Type</th>
-                          <th className="p-3">Method / Note</th>
+                          <th className="p-3">Method / Details</th>
                           <th className="p-3">Amount (USD)</th>
                           <th className="p-3 text-right">Status</th>
                         </tr>
@@ -1263,9 +1541,11 @@ export default function App() {
                               <td className="p-3">{l.date}</td>
                               <td className="p-3 font-bold">{l.type}</td>
                               <td className="p-3">{l.method}</td>
-                              <td className="p-3 font-bold text-slate-900">${l.amount.toLocaleString()}</td>
+                              <td className={`p-3 font-bold ${l.amount >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                {l.amount >= 0 ? `+$${l.amount.toLocaleString()}` : `-$${Math.abs(l.amount).toLocaleString()}`}
+                              </td>
                               <td className={`p-3 text-right font-bold ${
-                                l.status.includes('Approved')
+                                l.status.includes('Approved') || l.status.includes('Processed') || l.status.includes('Returned')
                                   ? 'text-emerald-600'
                                   : l.status.includes('Pending')
                                   ? 'text-amber-600'
@@ -1297,8 +1577,8 @@ export default function App() {
                     <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
                       CommoFx Compliance & Audit Desk (Sub-Admin)
                     </span>
-                    <h2 className="text-2xl font-black text-slate-900 mt-1">Client Accounts & Documents Queue</h2>
-                    <p className="text-xs text-slate-500">Inspection mode only. Review submitted documentation and client funding records.</p>
+                    <h2 className="text-2xl font-black text-slate-900 mt-1">Client Accounts, Deposits & Payouts Queue</h2>
+                    <p className="text-xs text-slate-500">Inspection mode only. Review submitted documentation, deposit requests, and withdrawal holds.</p>
                   </div>
                   <div className="bg-amber-50 text-amber-800 px-3 py-1.5 rounded-lg border border-amber-200 text-xs font-semibold flex items-center gap-1.5">
                     <Eye className="w-4 h-4" /> Non-Editable Mode
@@ -1359,11 +1639,11 @@ export default function App() {
           )}
 
           {/* ======================================================== */}
-          {/* SUPER ADMIN: ACCEPT / REJECT DEPOSITS & KYC              */}
+          {/* SUPER ADMIN: APPROVE DEPOSITS, WITHDRAWALS & KYC        */}
           {/* ======================================================== */}
           {currentUser.role === 'admin' && (
             <div className="space-y-6">
-              {/* SECTION A: PENDING DEPOSIT REQUESTS QUEUE WITH ACCEPT / REJECT BUTTONS */}
+              {/* SECTION 1: INCOMING DEPOSITS */}
               <div className="bg-white border border-blue-300 rounded-3xl shadow-xl p-8 space-y-4">
                 <div className="flex justify-between items-start border-b border-slate-200 pb-3">
                   <div>
@@ -1372,7 +1652,7 @@ export default function App() {
                     </span>
                     <h2 className="text-xl font-black text-slate-900 mt-1">Pending Client Deposit Requests</h2>
                     <p className="text-xs text-slate-500">
-                      Verify transaction reference and choose Accept to credit balance or Reject to decline.
+                      Verify transaction reference and choose Accept to credit balance or Reject to decline[cite: 14].
                     </p>
                   </div>
                   <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-xl">
@@ -1453,7 +1733,97 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION B: MASTER KYC CLEARANCE & BALANCES */}
+              {/* SECTION 2: WITHDRAWAL PAYOUT QUEUE */}
+              <div className="bg-white border border-emerald-300 rounded-3xl shadow-xl p-8 space-y-4">
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+                  <div>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded uppercase font-mono tracking-wider">
+                      Payout & Disbursal Queue
+                    </span>
+                    <h2 className="text-xl font-black text-slate-900 mt-1">Client Withdrawal Requests</h2>
+                    <p className="text-xs text-slate-500">
+                      Transfer funds to investor's bank/UPI and approve payout to complete transaction.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl">
+                    {withdrawalRequests.filter((w) => w.status === 'pending').length} Pending Payouts
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3.5">Withdrawal ID</th>
+                        <th className="p-3.5">Client</th>
+                        <th className="p-3.5">Destination & Beneficiary</th>
+                        <th className="p-3.5">USD Payout</th>
+                        <th className="p-3.5">INR Disbursal</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Disbursal Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {withdrawalRequests.length > 0 ? (
+                        withdrawalRequests.map((wth) => (
+                          <tr key={wth.id} className="hover:bg-slate-50">
+                            <td className="p-3.5 text-slate-400">{wth.id}</td>
+                            <td className="p-3.5 font-bold text-slate-900 font-sans">
+                              {wth.userName}
+                              <span className="text-[10px] text-slate-400 font-mono block">{wth.userEmail}</span>
+                            </td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-800 block">{wth.method}</span>
+                              <span className="text-[10px] text-slate-600 block break-all font-sans">{wth.beneficiary}</span>
+                            </td>
+                            <td className="p-3.5 font-black text-slate-900 text-sm">
+                              ${wth.amountUsd.toFixed(2)} USD
+                            </td>
+                            <td className="p-3.5 font-bold text-emerald-700">
+                              ₹{wth.amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                wth.status === 'completed'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : wth.status === 'rejected'
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}>
+                                {wth.status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right space-x-2">
+                              {wth.status === 'pending' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminApproveWithdrawal(wth.id)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-[10px] font-bold transition shadow-sm"
+                                  >
+                                    Approve & Mark Paid
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminRejectWithdrawal(wth.id)}
+                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-1 rounded-lg text-[10px] font-bold transition"
+                                  >
+                                    Reject (Refund)
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic">Processed</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr><td colSpan="7" className="p-6 text-center text-slate-400 font-sans">No withdrawal requests placed yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION 3: MASTER KYC CLEARANCE & BALANCES */}
               <div className="bg-white border border-purple-300 rounded-3xl shadow-xl p-8 space-y-6">
                 <div className="flex justify-between items-start border-b border-slate-200 pb-4">
                   <div>
